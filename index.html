@@ -289,15 +289,15 @@ body.editing [contenteditable="true"]:hover { outline: 1px dashed rgba(126,231,1
     color: #04121f; border: none; border-radius: 99px;
     background: linear-gradient(135deg, var(--accent), var(--accent-2));
     cursor: pointer; box-shadow: 0 8px 30px rgba(76,194,255,.35); }
-.s-start .start-btn.reveal { transition: opacity .9s var(--ease-out-expo), transform .9s var(--ease-out-expo), box-shadow .9s ease; }
-.s-start .start-btn.reveal.d5 { transition-delay: .92s, .92s, 0s; }
+.s-start.visible .start-btn.reveal { transition: opacity .9s var(--ease-out-expo), transform .9s var(--ease-out-expo), box-shadow .9s ease; }
+.s-start.visible .start-btn.reveal.d5 { transition-delay: .92s, .92s, 0s; }
 .s-start .start-btn:hover { transform: translateY(-3px) scale(1.03);
     box-shadow: 0 14px 44px rgba(76,194,255,.5);
     transition: transform .25s var(--ease-out-expo), box-shadow .25s ease; }
 .s-start .start-btn:active { transform: translateY(-1px) scale(1.0); }
 .s-start .start-btn .play-ico { font-size: 22px; }
 .s-start .start-hint { margin-top: 26px; font-size: 20px; color: var(--text-dim); }
-.s-start .reveal { transition-duration: .9s; }
+.s-start.visible .reveal { transition-duration: .9s; }
 .s-start .d1 { transition-delay: .2s; } .s-start .d2 { transition-delay: .4s; }
 .s-start .d3 { transition-delay: .58s; } .s-start .d4 { transition-delay: .76s; }
 .s-start .d5 { transition-delay: .92s; }
