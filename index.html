@@ -86,6 +86,11 @@ img, video, canvas, svg { max-width: 100%; max-height: 100%; }
 .reveal-scale { opacity: 0; transform: scale(.94);
     transition: opacity var(--duration-normal) var(--ease-out-expo), transform var(--duration-normal) var(--ease-out-expo); }
 .slide.visible .reveal-scale { opacity: 1; transform: scale(1); }
+/* 슬라이드를 떠날 때 reveal 요소가 중간 투명도에서 잔류하지 않도록
+   visible이 아닐 때는 transition을 즉시 끈다 */
+.slide:not(.visible) .reveal,
+.slide:not(.visible) .reveal-left,
+.slide:not(.visible) .reveal-scale { transition: none; }
 .d1 { transition-delay: .08s; } .d2 { transition-delay: .18s; } .d3 { transition-delay: .28s; }
 .d4 { transition-delay: .38s; } .d5 { transition-delay: .48s; } .d6 { transition-delay: .58s; }
 .d7 { transition-delay: .68s; } .d8 { transition-delay: .78s; }
