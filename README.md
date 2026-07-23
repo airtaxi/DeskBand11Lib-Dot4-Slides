@@ -37,4 +37,4 @@ Windows를 좋아해서 C#과 .NET을 시작했고, 지금은 WinUI·Uno Platfor
 
 ## 라이선스
 
-발표자료 본문(`index.html` 및 스크린샷 이미지)은 별도 표기가 없는 한 **CC BY 4.0**으로 공개합니다. 발표 시 인용한 타인 프로젝트(zadjii/Deskband11 등)의 자료는 각각의 라이선스를 따릅니다.
+MIT License. 발표 시 인용한 타인 프로젝트(zadjii/Deskband11 등)의 자료는 각각의 라이선스를 따릅니다.
