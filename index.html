@@ -341,7 +341,7 @@ body.editing [contenteditable="true"]:hover { outline: 1px dashed rgba(126,231,1
         <div class="stage-bg"><div class="mica"></div><div class="noise"></div></div>
 
         <!-- ============ S1. 타이틀 ============ -->
-        <section class="slide s-title active" data-ch="0">
+        <section class="slide s-title" data-ch="0">
             <div class="topbar reveal">
                 <div class="brand"><div class="logo"></div><div class="name">Deskband11Lib</div></div>
                 <div class="conf">Dot4 밋업 with 마이크로소프트 코리아</div>
@@ -1303,7 +1303,7 @@ addEventListener('keydown', e => {
 document.addEventListener('input', e => { if (editor.isActive) editor.save(); });
 
 editor.restore();
-new SlidePresentation();
+requestAnimationFrame(() => requestAnimationFrame(() => new SlidePresentation()));
 
 </script>
 </body>
