@@ -1,0 +1,1310 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>윈도우 11에서 사라진 작업표시줄 데스크밴드, WinUI·WPF로 다시 만들기 · 이호원</title>
+
+<!-- ===== FONTS: Pretendard (Korean UI) + JetBrains Mono (code) ===== -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+
+<style>
+/* ===========================================
+   THEME — Fluent Dark (Windows 11 Mica 감성)
+   색을 바꾸려면 이 변수들만 수정하면 됩니다.
+   =========================================== */
+:root {
+    --bg-primary: #0a0d12;          /* 기본 배경 */
+    --stage-bg: #05070a;            /* 레터박스 영역 */
+    --slide-bg: transparent;        /* 슬라이드는 투명 — 공유 mica 배경 사용 */
+    --text-primary: #e8edf4;
+    --text-secondary: #9aa4b2;
+    --text-dim: #6b7684;
+    --accent: #4cc2ff;              /* Windows 11 다크 액센트 블루 */
+    --accent-2: #7ee787;            /* 라임 그린 (앱 스크린샷과 톤 매칭) */
+    --accent-warm: #e8b34b;         /* 타입/강조용 앰버 */
+    --card: rgba(255,255,255,.045);
+    --card-border: rgba(255,255,255,.09);
+    --font-body: 'Pretendard Variable', Pretendard, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Pretendard Variable', monospace;
+    --ease-out-expo: cubic-bezier(.16,1,.3,1);
+    --duration-normal: .7s;
+    --taskbar-h: 76px;              /* 하단 고정 작업표시줄 크롬 높이 */
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* ===========================================
+   FIXED 16:9 STAGE — MANDATORY BASE (viewport-base.css)
+   =========================================== */
+html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: var(--stage-bg, #000); }
+.deck-viewport { position: fixed; inset: 0; overflow: hidden; background: var(--stage-bg, #000); }
+.deck-stage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; overflow: hidden;
+    transform-origin: 0 0; background: var(--bg-primary); }
+.slide { position: absolute; inset: 0; width: 1920px; height: 1080px; overflow: hidden; display: block;
+    visibility: hidden; opacity: 0; pointer-events: none; background: var(--slide-bg, #fff); }
+.slide.active, .slide.visible { visibility: visible; opacity: 1; pointer-events: auto; z-index: 1; }
+img, video, canvas, svg { max-width: 100%; max-height: 100%; }
+.deck-controls { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 1000; }
+@media print {
+    html, body { width: 1920px; height: auto; overflow: visible; background: #fff; }
+    .deck-viewport { position: static; overflow: visible; background: #fff; }
+    .deck-stage { position: static; width: auto; height: auto; transform: none !important; background: none; }
+    .slide { position: relative; display: block !important; visibility: visible !important; opacity: 1 !important;
+        pointer-events: auto !important; width: 1920px; height: 1080px; break-after: page; page-break-after: always; }
+    .slide:last-child { break-after: auto; page-break-after: auto; }
+    .deck-controls { display: none !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .2s !important; }
+}
+
+/* ===========================================
+   SHARED STAGE BACKGROUND — Mica 그라데이션 + 노이즈
+   슬라이드 뒤에 항상 깔리는 공유 레이어
+   =========================================== */
+.stage-bg { position: absolute; inset: 0; z-index: 0; pointer-events: none; background: var(--bg-primary); }
+.stage-bg .mica { position: absolute; inset: 0;
+    background:
+        radial-gradient(1200px 800px at 18% 8%, rgba(46,88,134,.40), transparent 65%),
+        radial-gradient(1000px 700px at 88% 96%, rgba(64,110,52,.22), transparent 65%),
+        radial-gradient(700px 500px at 70% 30%, rgba(40,60,90,.18), transparent 70%); }
+.stage-bg .noise { position: absolute; inset: 0; opacity: .045; mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)'/%3E%3C/svg%3E"); }
+
+/* ===========================================
+   REVEAL ANIMATIONS — .slide.visible 진입 시 트리거
+   =========================================== */
+.reveal { opacity: 0; transform: translateY(30px);
+    transition: opacity var(--duration-normal) var(--ease-out-expo), transform var(--duration-normal) var(--ease-out-expo); }
+.slide.visible .reveal { opacity: 1; transform: translateY(0); }
+.reveal-left { opacity: 0; transform: translateX(-44px);
+    transition: opacity var(--duration-normal) var(--ease-out-expo), transform var(--duration-normal) var(--ease-out-expo); }
+.slide.visible .reveal-left { opacity: 1; transform: translateX(0); }
+.reveal-scale { opacity: 0; transform: scale(.94);
+    transition: opacity var(--duration-normal) var(--ease-out-expo), transform var(--duration-normal) var(--ease-out-expo); }
+.slide.visible .reveal-scale { opacity: 1; transform: scale(1); }
+.d1 { transition-delay: .08s; } .d2 { transition-delay: .18s; } .d3 { transition-delay: .28s; }
+.d4 { transition-delay: .38s; } .d5 { transition-delay: .48s; } .d6 { transition-delay: .58s; }
+.d7 { transition-delay: .68s; } .d8 { transition-delay: .78s; }
+
+/* ===========================================
+   SLIDE LAYOUT & TYPOGRAPHY (1920×1080 고정 좌표)
+   =========================================== */
+.slide { font-family: var(--font-body); color: var(--text-primary); }
+.content { position: absolute; left: 120px; right: 120px; top: 78px; bottom: calc(var(--taskbar-h) + 34px); }
+.eyebrow { display: inline-flex; align-items: center; gap: 14px; font-size: 21px; font-weight: 650;
+    letter-spacing: 3.5px; color: var(--accent); }
+.eyebrow::before { content: ""; width: 40px; height: 2px; background: var(--accent); }
+h2.title { margin-top: 22px; font-size: 62px; font-weight: 760; letter-spacing: -1.5px; line-height: 1.22; }
+h2.title em { font-style: normal; color: var(--accent); }
+h2.title .gr { background: linear-gradient(92deg, var(--accent) 10%, var(--accent-2) 90%);
+    -webkit-background-clip: text; background-clip: text; color: transparent; }
+.lede { margin-top: 20px; font-size: 28px; color: var(--text-secondary); font-weight: 450; line-height: 1.5; }
+.lede b, .bullets b { color: var(--text-primary); font-weight: 650; }
+.statement { font-size: 76px; font-weight: 780; letter-spacing: -2px; line-height: 1.3; }
+.caption { font-size: 21px; color: var(--text-dim); }
+
+/* 큰 불릿 (저밀도: 슬라이드당 최대 3개) */
+.bullets { list-style: none; display: flex; flex-direction: column; gap: 30px; }
+.bullets li { position: relative; padding-left: 44px; font-size: 30px; line-height: 1.5; color: var(--text-secondary); }
+.bullets li::before { content: ""; position: absolute; left: 4px; top: 15px; width: 16px; height: 16px;
+    border-radius: 5px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+.bullets li small { display: block; font-size: 22px; color: var(--text-dim); margin-top: 8px; }
+
+/* 칼럼/카드/칩 */
+.cols { display: flex; gap: 44px; align-items: stretch; }
+.card { background: var(--card); border: 1px solid var(--card-border); border-radius: 16px; padding: 38px 42px; }
+.card h3 { font-size: 29px; font-weight: 700; margin-bottom: 14px; }
+.card h3 .ico { margin-right: 12px; }
+.card p { font-size: 24px; color: var(--text-secondary); line-height: 1.55; }
+.chips { display: flex; flex-wrap: wrap; gap: 16px; }
+.chip { padding: 12px 26px; border-radius: 99px; background: var(--card); border: 1px solid var(--card-border);
+    font-size: 23px; color: var(--text-secondary); }
+.chip.on { border-color: rgba(76,194,255,.55); color: var(--accent); }
+.kbd { font-family: var(--font-mono); font-size: 22px; background: rgba(255,255,255,.07);
+    border: 1px solid var(--card-border); border-bottom-width: 3px; border-radius: 8px; padding: 6px 14px; }
+
+/* ===========================================
+   CODE WINDOW — Win11 스타일 창 크롬 + 코드
+   =========================================== */
+.code-window { background: rgba(13,17,23,.82); border: 1px solid var(--card-border); border-radius: 14px;
+    overflow: hidden; box-shadow: 0 18px 50px rgba(0,0,0,.35); }
+.cw-head { display: flex; align-items: center; height: 52px; padding: 0 22px; gap: 14px;
+    background: rgba(255,255,255,.04); border-bottom: 1px solid var(--card-border); }
+.cw-head .fn { font-family: var(--font-mono); font-size: 20px; color: var(--text-secondary); flex: 1; }
+.cw-head .wbtn { display: flex; gap: 18px; color: var(--text-dim); font-size: 18px; }
+.code-window pre { padding: 30px 34px; font-family: var(--font-mono); font-size: 25px; line-height: 1.7;
+    color: #d7dee8; overflow: hidden; }
+.code-window pre.sm { font-size: 22px; line-height: 1.65; }
+/* 구문 강조: k=키워드 t=타입 s=문자열 c=주석 n=숫자 m=메서드 */
+.k { color: #63b6ff; } .t { color: var(--accent-warm); } .s { color: var(--accent-2); }
+.c { color: #6b7684; } .n { color: #d2a8ff; } .m { color: #79d0ff; }
+
+/* 스크린샷 카드 */
+.imgcard { background: var(--card); border: 1px solid rgba(255,255,255,.1); border-radius: 16px;
+    padding: 14px; overflow: hidden; }
+.imgcard img { display: block; width: 100%; border-radius: 10px; }
+.imgcard figcaption { padding: 16px 10px 6px; font-size: 21px; color: var(--text-dim); display: flex; align-items: center; gap: 12px; }
+.imgcard figcaption i { width: 12px; height: 12px; border-radius: 4px; background: var(--accent); flex: none; }
+.imgcard figcaption i.g { background: var(--accent-2); }
+.strip { width: 100%; object-fit: cover; object-position: center bottom; display: block; border-radius: 10px; }
+
+/* ===========================================
+   챕터 디바이더 슬라이드
+   =========================================== */
+.divider .ghost { position: absolute; right: 60px; top: 40%; transform: translateY(-50%); font-size: 620px;
+    font-weight: 800; letter-spacing: -20px; color: rgba(255,255,255,.045); line-height: 1; pointer-events: none; }
+.divider .glow { position: absolute; left: -160px; top: -180px; width: 1000px; height: 760px; pointer-events: none;
+    background: radial-gradient(closest-side, rgba(76,194,255,.14), transparent 70%); }
+.divider .content { display: flex; flex-direction: column; justify-content: center; }
+.divider .chnum { font-size: 25px; font-weight: 650; letter-spacing: 6px; color: var(--accent); margin-bottom: 30px; }
+.divider h2 { font-size: 108px; font-weight: 800; letter-spacing: -3px; line-height: 1.18; }
+.divider .sub { margin-top: 34px; font-size: 30px; color: var(--text-secondary); }
+
+/* ===========================================
+   작업표시줄 목업 (다이어그램용 미니 taskbar)
+   =========================================== */
+.tbmock { height: 78px; border-radius: 14px; background: rgba(12,17,24,.9); border: 1px solid var(--card-border);
+    display: flex; align-items: center; padding: 0 26px; gap: 12px; position: relative; }
+.tbmock .m-start { display: grid; grid-template-columns: 12px 12px; grid-template-rows: 12px 12px; gap: 2.5px; margin: 0 8px; flex: none; }
+.tbmock .m-start b { background: #7db8dd; border-radius: 1.5px; }
+.tbmock .m-app { width: 36px; height: 36px; border-radius: 9px; background: rgba(255,255,255,.09); flex: none; }
+.tbmock .m-app.a1 { background: rgba(138,125,196,.65); } .tbmock .m-app.a2 { background: rgba(232,179,75,.6); }
+.tbmock .m-app.a3 { background: rgba(91,155,213,.65); } .tbmock .m-app.a4 { background: rgba(199,93,93,.6); }
+.tbmock .m-tray { margin-left: auto; display: flex; align-items: center; gap: 14px; color: var(--text-dim);
+    font-size: 16px; flex: none; }
+.tbmock .m-gap { flex: 1; align-self: center; height: 50px; border: 2px dashed rgba(76,194,255,.55); border-radius: 10px;
+    display: grid; place-items: center; font-size: 19px; color: var(--accent); font-weight: 600; min-width: 60px; }
+.tbmock .m-gap.dim { border-color: rgba(255,255,255,.14); color: var(--text-dim); font-weight: 450; }
+.tbmock .m-widget { height: 50px; border-radius: 9px; background: rgba(76,194,255,.14); border: 1px solid rgba(76,194,255,.6);
+    display: flex; align-items: center; gap: 10px; padding: 0 18px; font-size: 18px; color: var(--accent); font-weight: 650; flex: none; }
+.tbmock .m-seg { height: 50px; border-radius: 9px; display: grid; place-items: center; font-size: 17px; font-weight: 600; flex: none; }
+.mock-label { font-size: 20px; color: var(--text-dim); margin-bottom: 14px; }
+
+/* HWND 트리 (구조화된 행 — 한글 주석은 공백 정렬에 의존하지 않음) */
+.tree { font-family: var(--font-mono); font-size: 23px; line-height: 1.4; color: var(--text-secondary); }
+.tree .tr { display: flex; align-items: baseline; gap: 12px; padding: 7px 0; white-space: nowrap; }
+.tree .tr.i1 { padding-left: 28px; } .tree .tr.i2 { padding-left: 56px; } .tree .tr.i3 { padding-left: 84px; }
+.tree .cn { color: var(--text-dim); }
+.tree .nm { color: var(--text-primary); font-weight: 600; }
+.tree .nm.nd { color: var(--accent); }
+.tree .cm { font-family: var(--font-body); font-size: 18px; color: var(--text-dim); }
+.tree .cm::before { content: "← "; }
+.tree-note { margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--card-border);
+    font-family: var(--font-body); font-size: 22px; font-weight: 600; color: var(--accent); }
+
+/* 플로우/단계 다이어그램 */
+.flow { display: flex; align-items: center; gap: 18px; }
+.flow .step { flex: 1; background: var(--card); border: 1px solid var(--card-border); border-radius: 14px;
+    padding: 26px 24px; text-align: center; }
+.flow .step h4 { font-size: 24px; font-weight: 700; margin-bottom: 8px; }
+.flow .step p { font-size: 19px; color: var(--text-dim); line-height: 1.45; }
+.flow .arr { font-size: 30px; color: var(--accent); flex: none; }
+.flow .step.hot { border-color: rgba(76,194,255,.5); background: rgba(76,194,255,.07); }
+
+/* 슬롯 배분 바 */
+.alloc { display: flex; gap: 8px; height: 74px; }
+.alloc .seg { border-radius: 10px; display: grid; place-items: center; font-size: 21px; font-weight: 650; line-height: 1.3; text-align: center; }
+.alloc .f1 { background: rgba(76,194,255,.18); border: 1px solid rgba(76,194,255,.6); color: var(--accent); }
+.alloc .f2 { background: rgba(232,179,75,.15); border: 1px solid rgba(232,179,75,.55); color: var(--accent-warm); }
+.alloc .st { background: rgba(126,231,135,.13); border: 1px solid rgba(126,231,135,.5); color: var(--accent-2); }
+.alloc .used { background: rgba(255,255,255,.05); border: 1px solid var(--card-border); color: var(--text-dim); }
+
+/* ===========================================
+   덱 크롬: 진행 바 + 고정 작업표시줄
+   =========================================== */
+.deck-progress { position: absolute; top: 0; left: 0; right: 0; height: 5px; z-index: 20; background: rgba(255,255,255,.05); }
+.deck-progress i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    transition: width .45s var(--ease-out-expo); }
+.deck-taskbar { position: absolute; left: 0; right: 0; bottom: 0; height: var(--taskbar-h); z-index: 15;
+    background: rgba(18,24,32,.78); backdrop-filter: blur(30px); border-top: 1px solid rgba(255,255,255,.08);
+    display: flex; align-items: center; padding: 0 34px; font-family: var(--font-body); color: var(--text-primary); }
+.winlogo { display: grid; grid-template-columns: 13px 13px; grid-template-rows: 13px 13px; gap: 2.5px; }
+.winlogo b { background: var(--accent); border-radius: 1.5px; }
+.dtb-left { display: flex; align-items: center; gap: 16px; width: 320px; flex: none; }
+.dtb-brand { font-size: 21px; font-weight: 650; color: var(--text-secondary); }
+.dtb-center { position: absolute; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; }
+.ch-ico { width: 42px; height: 42px; border-radius: 10px; border: 1px solid transparent; background: rgba(255,255,255,.06);
+    color: var(--text-dim); font-family: var(--font-body); font-size: 19px; font-weight: 650; cursor: pointer;
+    position: relative; transition: all .25s ease; }
+.ch-ico:hover { background: rgba(255,255,255,.12); color: var(--text-primary); }
+.ch-ico::after { content: ""; position: absolute; left: 50%; bottom: -9px; transform: translateX(-50%);
+    width: 6px; height: 3px; border-radius: 2px; background: rgba(255,255,255,.25); transition: all .25s ease; }
+.ch-ico.on { background: rgba(76,194,255,.16); border-color: rgba(76,194,255,.5); color: var(--accent); }
+.ch-ico.on::after { width: 22px; background: var(--accent); }
+.dtb-widget { display: flex; align-items: center; gap: 14px; height: 56px; padding: 0 22px 0 10px; margin-left: 16px;
+    border-radius: 10px; background: rgba(255,255,255,.06); border: 1px solid rgba(76,194,255,.5);
+    animation: dockin .85s cubic-bezier(.34,1.4,.64,1) 1.3s both, tbglow 1.5s ease 2.25s 2; }
+@keyframes dockin { from { opacity: 0; transform: translateY(-120px) scale(.9); } to { opacity: 1; transform: none; } }
+@keyframes tbglow { 0%, 100% { box-shadow: 0 0 0 rgba(76,194,255,0); } 50% { box-shadow: 0 0 34px rgba(76,194,255,.5); } }
+.dtb-widget .art { width: 38px; height: 38px; border-radius: 8px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+.dtb-widget .t { font-size: 18px; font-weight: 650; line-height: 1.25; }
+.dtb-widget .d { font-size: 14px; color: var(--text-dim); line-height: 1.25; }
+.dtb-tray { margin-left: auto; display: flex; align-items: center; gap: 22px; color: #c6cdd6; }
+.dtb-tray .ime { font-size: 18px; }
+.bars { display: flex; align-items: flex-end; gap: 3px; }
+.bars b { width: 4px; background: #c6cdd6; border-radius: 1px; }
+.bars b:nth-child(1){height:6px} .bars b:nth-child(2){height:10px} .bars b:nth-child(3){height:14px} .bars b:nth-child(4){height:18px}
+.dtb-tray .clock { text-align: right; line-height: 1.3; }
+.dtb-tray .clock span { font-size: 18px; font-weight: 600; display: block; }
+.dtb-tray .clock small { font-size: 14px; color: var(--text-dim); }
+
+/* ===========================================
+   인라인 편집 UI (좌상단 핫존, E 키)
+   =========================================== */
+.edit-hotzone { position: fixed; top: 0; left: 0; width: 80px; height: 80px; z-index: 10000; cursor: pointer; }
+.edit-toggle { position: fixed; top: 18px; left: 18px; width: 52px; height: 52px; border-radius: 14px;
+    border: 1px solid var(--card-border); background: rgba(18,24,32,.9); font-size: 22px; cursor: pointer;
+    opacity: 0; pointer-events: none; transition: opacity .3s ease; z-index: 10001; }
+.edit-toggle.show, .edit-toggle.active { opacity: 1; pointer-events: auto; }
+.edit-toggle.active { border-color: var(--accent); box-shadow: 0 0 18px rgba(76,194,255,.4); }
+body.editing .slide.active { outline: 2px dashed rgba(76,194,255,.5); outline-offset: -2px; }
+body.editing [contenteditable="true"]:hover { outline: 1px dashed rgba(126,231,135,.6); }
+
+/* ===========================================
+   슬라이드별 전용 스타일
+   =========================================== */
+/* S1 타이틀 */
+.s-title .topbar { position: absolute; top: 56px; left: 120px; right: 120px; display: flex;
+    justify-content: space-between; align-items: center; }
+.s-title .brand { display: flex; align-items: center; gap: 16px; background: var(--card);
+    border: 1px solid var(--card-border); border-radius: 99px; padding: 12px 28px 12px 14px; }
+.s-title .brand .logo { width: 34px; height: 34px; border-radius: 9px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+.s-title .brand .name { font-size: 25px; font-weight: 650; }
+.s-title .conf { font-size: 23px; color: var(--text-secondary); letter-spacing: 1px; }
+.s-title .hero { position: absolute; left: 120px; top: 236px; }
+.s-title h1 { margin: 34px 0 0; font-size: 96px; line-height: 1.22; font-weight: 800; letter-spacing: -2.5px; }
+.s-title h1 .gr { background: linear-gradient(92deg, var(--accent) 10%, var(--accent-2) 90%);
+    -webkit-background-clip: text; background-clip: text; color: transparent; }
+.s-title .sub { margin-top: 38px; font-size: 30px; color: var(--text-secondary); }
+.s-title .sub b { color: var(--text-primary); font-weight: 650; }
+.s-title .speaker { margin-top: 56px; display: flex; align-items: center; gap: 22px; }
+.s-title .avatar { width: 64px; height: 64px; border-radius: 50%; background: linear-gradient(135deg, #1f6feb, var(--accent));
+    display: grid; place-items: center; font-size: 28px; font-weight: 800; color: #04121f; }
+.s-title .who { font-size: 29px; font-weight: 650; }
+.s-title .who span { display: block; font-size: 22px; font-weight: 450; color: var(--text-dim); margin-top: 6px; }
+.s-title .callout { position: absolute; bottom: 84px; left: 1157px; transform: translateX(-50%); color: var(--accent);
+    font-size: 22px; font-weight: 650; display: flex; flex-direction: column; align-items: center; gap: 8px;
+    text-shadow: 0 2px 14px rgba(0,0,0,.65); z-index: 16; }
+.s-title .callout .stem { width: 2px; height: 44px; background: linear-gradient(var(--accent), transparent); }
+/* 타이틀 슬라이드 전용: 인트로 스태거를 시안 수준으로 강화 */
+.s-title .reveal, .s-title .reveal-left { transition-duration: .9s; }
+.s-title .d1 { transition-delay: .25s; } .s-title .d2 { transition-delay: .45s; }
+.s-title .d3 { transition-delay: .62s; } .s-title .d4 { transition-delay: .8s; }
+.s-title .d5 { transition-delay: 1.0s; } .s-title .d6 { transition-delay: 1.2s; }
+
+/* S2 훅 (풀블리드 스트립) */
+.hookwrap { display: flex; flex-direction: column; gap: 34px; margin-top: 52px; }
+.hookwrap .legend { display: flex; gap: 30px; font-size: 22px; color: var(--text-secondary); padding-left: 6px; }
+.hookwrap .legend i { display: inline-block; width: 13px; height: 13px; border-radius: 4px; margin-right: 10px; }
+
+/* S4 프로젝트 앱 그리드 */
+.appgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.appgrid .card { display: flex; gap: 22px; align-items: center; padding: 30px 32px; }
+.appgrid .aico { width: 62px; height: 62px; border-radius: 15px; flex: none; display: grid; place-items: center;
+    font-size: 26px; font-weight: 800; color: #04121f; }
+.appgrid .card h3 { margin-bottom: 4px; font-size: 27px; }
+.appgrid .card p { font-size: 20px; }
+
+/* S5 아젠다 */
+.agenda { display: flex; flex-direction: column; gap: 0; counter-reset: ag; }
+.agenda .row { display: flex; align-items: center; gap: 30px; padding: 25px 10px; border-bottom: 1px solid rgba(255,255,255,.06); }
+.agenda .num { font-family: var(--font-mono); font-size: 24px; color: var(--accent); width: 56px; flex: none; }
+.agenda .name { font-size: 30px; font-weight: 600; flex: 1; }
+.agenda .hint { font-size: 21px; color: var(--text-dim); }
+
+/* S35 라이브 데모 */
+.demo-big { font-size: 130px; font-weight: 800; letter-spacing: -3px;
+    background: linear-gradient(92deg, var(--accent), var(--accent-2));
+    -webkit-background-clip: text; background-clip: text; color: transparent; }
+.demo-list { display: flex; gap: 26px; margin-top: 64px; }
+.demo-list .card { flex: 1; }
+.demo-list .dnum { font-family: var(--font-mono); font-size: 22px; color: var(--accent); margin-bottom: 14px; }
+
+/* S37 클로징 링크 */
+.links { display: flex; flex-direction: column; gap: 22px; margin-top: 54px; }
+.links .lk { display: flex; align-items: center; gap: 20px; font-size: 27px; }
+.links .lk .tag { font-size: 19px; font-weight: 650; color: var(--accent); background: rgba(76,194,255,.12);
+    border: 1px solid rgba(76,194,255,.4); border-radius: 8px; padding: 6px 16px; width: 108px; text-align: center; flex: none; }
+.links .lk code { font-family: var(--font-mono); color: var(--text-secondary); font-size: 24px; }
+
+/* ===== END-CSS ===== */
+</style>
+</head>
+<body>
+<div class="deck-viewport">
+    <main class="deck-stage" id="deckStage">
+        <!-- 공유 배경 (모든 슬라이드 뒤) -->
+        <div class="stage-bg"><div class="mica"></div><div class="noise"></div></div>
+
+        <!-- ============ S1. 타이틀 ============ -->
+        <section class="slide s-title active" data-ch="0">
+            <div class="topbar reveal">
+                <div class="brand"><div class="logo"></div><div class="name">Deskband11Lib</div></div>
+                <div class="conf">Dot4 밋업 with 마이크로소프트 코리아</div>
+            </div>
+            <div class="hero">
+                <div class="eyebrow reveal d1">WINDOWS 11 · TASKBAR · WIN32 × WINUI × WPF</div>
+                <h1><span class="reveal d2" style="display:block">윈도우 11에서 사라진</span><span class="reveal d3" style="display:block">작업표시줄 데스크밴드,</span><span class="reveal d4 gr" style="display:block">WinUI·WPF로 다시 만들기</span></h1>
+                <div class="sub reveal d5"><b>SetParent</b> 하나로 시작해서 스토어 출시까지 간 라이브러리 개발기</div>
+                <div class="speaker reveal d6">
+                    <div class="avatar">H</div>
+                    <div class="who">이호원 · Howon Lee<span>airtaxi · .NET 데스크톱 개발자</span></div>
+                </div>
+            </div>
+            <div class="callout reveal" style="transition-delay:1.95s">이런 걸 만듭니다<div class="stem"></div></div>
+        </section>
+
+        <!-- ============ S2. 자기소개 ============ -->
+        <section class="slide" data-ch="0">
+            <div class="content">
+                <div class="eyebrow reveal">SPEAKER</div>
+                <h2 class="title reveal d1">이호원 <em>· airtaxi</em></h2>
+                <p class="lede reveal d2"><b>Windows</b>를 좋아해서 C#과 .NET을 시작했고,<br>지금은 WinUI·Uno Platform으로 Windows 앱을 만듭니다.</p>
+                <div class="flow" style="margin-top:80px">
+                    <div class="step reveal d3" style="padding:34px 30px">
+                        <h4 style="margin-bottom:12px">게임 개발자 · 아크스타</h4>
+                        <p style="font-size:21px">인디 리듬게임 회사에서<br>게임 서버·클라이언트 개발</p>
+                    </div>
+                    <div class="arr reveal d3">→</div>
+                    <div class="step reveal d4" style="padding:34px 30px">
+                        <h4 style="margin-bottom:12px">컴퓨터공학 박사</h4>
+                        <p style="font-size:21px">선문대학교 · 논문은 멀티모달 LLM과<br>RAG 기반 화재 대응 조언 시스템</p>
+                    </div>
+                    <div class="arr reveal d4">→</div>
+                    <div class="step hot reveal d5" style="padding:34px 30px">
+                        <h4 style="margin-bottom:12px">지금 · 서울 현충원</h4>
+                        <p style="font-size:21px">박사 졸업 후<br>사회복무요원으로 복무 중<br>개발은 퇴근 후에 합니다</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ S3. 훅: 지금 제 작업표시줄 ============ -->
+        <section class="slide" data-ch="0">
+            <div class="content">
+                <div class="eyebrow reveal">LIVE ON MY TASKBAR</div>
+                <h2 class="title reveal d1">지금 <em>제 작업표시줄</em>은 이렇습니다</h2>
+                <div class="hookwrap">
+                    <figure class="imgcard reveal d2">
+                        <img class="strip" src="ATIC_CAS+PS.jpg" alt="PinStats와 CLI Account Switcher 위젯이 함께 떠 있는 작업표시줄" style="height:200px">
+                        <figcaption><i class="g"></i>CLI Account Switcher · AI CLI 사용량<span style="margin-left:26px"></span><i></i>PinStats · 시스템 모니터, 둘이 한 작업표시줄에 동시에</figcaption>
+                    </figure>
+                    <figure class="imgcard reveal d3">
+                        <img class="strip" src="ATIC_DB11-TB.jpg" alt="BarPlay 미디어 위젯이 떠 있는 작업표시줄" style="height:200px">
+                        <figcaption><i></i>BarPlay · 지금 재생 중인 미디어와 컨트롤</figcaption>
+                    </figure>
+                </div>
+                <p class="lede reveal d4" style="margin-top:36px">전부 실제로 돌아가는 <b>.NET 앱</b>입니다. 오늘은 이걸 만드는 법을 이야기합니다.</p>
+            </div>
+        </section>
+
+        <!-- ============ S4. 만든 것들 ============ -->
+        <section class="slide" data-ch="0">
+            <div class="content">
+                <div class="eyebrow reveal">PROJECTS</div>
+                <h2 class="title reveal d1">오늘 나오는 프로젝트는 <em>전부 제가 만든 것들</em>입니다</h2>
+                <div class="appgrid reveal d2" style="margin-top:48px">
+                    <div class="card"><div class="aico" style="background:linear-gradient(135deg,#4cc2ff,#7ee787)">D</div><div><h3>Deskband11Lib</h3><p>오늘 소개할 작업표시줄 호스팅 라이브러리</p></div></div>
+                    <div class="card"><div class="aico" style="padding:0;overflow:hidden"><img src="logo-bp.svg" alt="BarPlay 로고" style="width:100%;height:100%;display:block;border-radius:inherit"></div><div><h3>BarPlay</h3><p>미디어 위젯 · 라이브러리 검증용 PoC → 스토어 출시</p></div></div>
+                    <div class="card"><div class="aico" style="padding:0;overflow:hidden"><img src="logo-ps.png" alt="PinStats 로고" style="width:100%;height:100%;display:block;border-radius:inherit"></div><div><h3>PinStats</h3><p>시스템 모니터 · 기존 앱에 위젯 기능을 이식</p></div></div>
+                    <div class="card"><div class="aico" style="padding:0;overflow:hidden"><img src="logo-cli.svg" alt="CLI Account Switcher 로고" style="width:100%;height:100%;display:block;border-radius:inherit"></div><div><h3>CLI Account Switcher</h3><p>AI CLI 계정·사용량 관리 · 마찬가지로 위젯 이식</p></div></div>
+                </div>
+                <p class="lede reveal d3" style="margin-top:44px">이 밖에도 AT-Installer · DeskBorder · LidGuard 등 <b>오픈소스 Windows 앱을 15개 넘게</b> 만들어 공개했습니다.</p>
+                <p class="caption reveal d4" style="margin-top:26px">github.com/airtaxi</p>
+            </div>
+        </section>
+
+        <!-- ============ S5. 아젠다 ============ -->
+        <section class="slide" data-ch="0">
+            <div class="content">
+                <div class="eyebrow reveal">AGENDA</div>
+                <h2 class="title reveal d1">오늘 다룰 내용</h2>
+                <div class="agenda" style="margin-top:40px">
+                    <div class="row reveal d2"><span class="num">01</span><span class="name">사라진 데스크밴드</span><span class="hint">Windows 11이 없앤 것</span></div>
+                    <div class="row reveal d2"><span class="num">02</span><span class="name">알고 보니 그냥 창이었다</span><span class="hint">zadjii/Deskband11</span></div>
+                    <div class="row reveal d3"><span class="num">03</span><span class="name">작업표시줄에 창 붙이기</span><span class="hint">Win32 + UI Automation</span></div>
+                    <div class="row reveal d3"><span class="num">04</span><span class="name">라이브러리로 만들기</span><span class="hint">설계 · 복구 · 멀티 인스턴스</span></div>
+                    <div class="row reveal d4"><span class="num">05</span><span class="name">요즘 .NET으로 Win32 다루기</span><span class="hint">CsWin32 · 소스 생성 COM · NativeAOT</span></div>
+                    <div class="row reveal d4"><span class="num">06</span><span class="name">PoC에서 스토어까지 + 라이브 데모</span><span class="hint">BarPlay · PinStats · CAS</span></div>
+                    <div class="row reveal d5"><span class="num">07</span><span class="name">한계와 배운 점</span><span class="hint">그리고 Q&A</span></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ S6. CH1 디바이더 ============ -->
+        <section class="slide divider" data-ch="1">
+            <div class="glow"></div>
+            <div class="ghost">01</div>
+            <div class="content">
+                <div class="chnum reveal">CHAPTER 01</div>
+                <h2 class="reveal d1">사라진<br>데스크밴드</h2>
+                <div class="sub reveal d2">Windows 95부터 있던 작업표시줄 도구들은 어디로 갔나</div>
+            </div>
+        </section>
+
+        <!-- ============ S7. 데스크밴드란 ============ -->
+        <section class="slide" data-ch="1">
+            <div class="content">
+                <div class="eyebrow reveal">WINDOWS 95 → 10</div>
+                <h2 class="title reveal d1">먼저, 데스크밴드가 <em>뭐였는지</em>부터</h2>
+                <div class="reveal d2" style="margin-top:56px">
+                    <div class="mock-label">Windows 10까지의 작업표시줄</div>
+                    <div class="tbmock">
+                        <span class="m-start"><b></b><b></b><b></b><b></b></span>
+                        <div class="m-app a1"></div><div class="m-app a2"></div><div class="m-app a3"></div>
+                        <div class="m-gap">데스크밴드(도구 모음)가 있던 자리</div>
+                        <div class="m-tray"><span>한 A</span><span>12:58 PM</span></div>
+                    </div>
+                </div>
+                <ul class="bullets" style="margin-top:60px">
+                    <li class="reveal d3"><b>IDeskBand</b> COM 확장이 작업표시줄 안에 서드파티 UI를 넣는 공식 통로였습니다<small>탐색기가 내 DLL을 로드해서 작업표시줄 안에 그려줬습니다</small></li>
+                    <li class="reveal d4">미디어 컨트롤, 주소창, 시스템 모니터, 퀵런처가 전부 여기 있었습니다</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- ============ S8. Win11 사망선고 ============ -->
+        <section class="slide" data-ch="1">
+            <div class="content">
+                <div class="eyebrow reveal">WINDOWS 11</div>
+                <h2 class="title reveal d1">작업표시줄을 <em>새로 만들면서</em> 데스크밴드를 버렸습니다</h2>
+                <div class="reveal d2" style="margin-top:52px">
+                    <div class="mock-label">Windows 11의 작업표시줄, XAML 기반으로 새로 작성</div>
+                    <div class="tbmock">
+                        <div class="m-gap dim" style="border-style:solid;border-width:0">&nbsp;</div>
+                        <span class="m-start"><b></b><b></b><b></b><b></b></span>
+                        <div class="m-app a1"></div><div class="m-app a2"></div><div class="m-app a3"></div><div class="m-app a4"></div>
+                        <div class="m-gap dim" style="border-style:solid;border-width:0">&nbsp;</div>
+                        <div class="m-tray"><span>한 A</span><span>12:58 PM</span></div>
+                    </div>
+                </div>
+                <ul class="bullets" style="margin-top:56px">
+                    <li class="reveal d3">Deskband API는 <b>제거</b>, 공식 대체재는 없음<small>도구 모음 메뉴 자체가 사라졌습니다</small></li>
+                    <li class="reveal d4">Windows 10에서 쓰던 서드파티 작업표시줄 도구는 <b>전부 못 쓰게 됐습니다</b></li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- ============ S9. 수요는 여전 (스테이트먼트) ============ -->
+        <section class="slide" data-ch="1">
+            <div class="content" style="display:flex;flex-direction:column;justify-content:center">
+                <div class="statement reveal">그런데 <span style="color:var(--accent)">항상 보이는 작은 자리</span>는<br>여전히 필요했습니다</div>
+                <div class="chips reveal d3" style="margin-top:70px">
+                    <span class="chip">미디어 컨트롤</span>
+                    <span class="chip">시스템 모니터</span>
+                    <span class="chip">빌드 · CI 상태</span>
+                    <span class="chip">사용량 표시기</span>
+                    <span class="chip">타이머</span>
+                    <span class="chip">빠른 실행</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ S10. CH2 디바이더 ============ -->
+        <section class="slide divider" data-ch="2">
+            <div class="glow"></div>
+            <div class="ghost">02</div>
+            <div class="content">
+                <div class="chnum reveal">CHAPTER 02</div>
+                <h2 class="reveal d1">알고 보니<br>그냥 창이었다</h2>
+                <div class="sub reveal d2">zadjii/Deskband11에서 얻은 아이디어</div>
+            </div>
+        </section>
+
+        <!-- ============ S11. zadjii/Deskband11 ============ -->
+        <section class="slide" data-ch="2">
+            <div class="content">
+                <div class="eyebrow reveal">INSPIRATION</div>
+                <h2 class="title reveal d1">GitHub에서 이런 걸 발견했습니다</h2>
+                <div class="cols" style="margin-top:52px;align-items:center">
+                    <div style="flex:1">
+                        <ul class="bullets">
+                            <li class="reveal d2"><b>zadjii/Deskband11</b>, Windows 11 작업표시줄에 미디어 컨트롤을 얹은 해커톤 프로젝트</li>
+                            <li class="reveal d3">데스크밴드 API 없이, 작업표시줄 안에 UI가 <b>실제로 떠 있었습니다</b></li>
+                        </ul>
+                        <div class="card reveal d4" style="margin-top:44px;border-color:rgba(76,194,255,.4)">
+                            <p style="font-size:27px;color:var(--text-primary)">"작업표시줄 위에 투명한 창을 <b style="color:var(--accent)">얹으면</b> 되잖아?"</p>
+                        </div>
+                    </div>
+                    <figure class="imgcard reveal d3" style="width:820px;flex:none">
+                        <img src="ATIC_DB11-Orig.jpg" alt="원본 Deskband11이 작업표시줄에 미디어 컨트롤을 표시한 모습">
+                        <figcaption><i></i>원본 Deskband11 실행 모습, 지금 재생 중인 곡과 컨트롤</figcaption>
+                    </figure>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ S12. 핵심 아이디어 3단계 ============ -->
+        <section class="slide" data-ch="2">
+            <div class="content">
+                <div class="eyebrow reveal">THE TRICK</div>
+                <h2 class="title reveal d1">필요한 건 <em>평범한 Win32 호출</em> 몇 개뿐입니다</h2>
+                <div class="flow" style="margin-top:64px">
+                    <div class="step reveal d2"><h4>① 투명한 창을 만든다</h4><p>WinUI 3 · WPF의<br>평범한 Window</p></div>
+                    <div class="arr reveal d2">→</div>
+                    <div class="step hot reveal d3"><h4>② SetParent</h4><p>작업표시줄(Shell_TrayWnd)의<br>자식 HWND로 입양</p></div>
+                    <div class="arr reveal d3">→</div>
+                    <div class="step reveal d4"><h4>③ 이동하고 클립</h4><p>SetWindowPos + SetWindowRgn으로<br>빈 공간에 딱 맞춤</p></div>
+                </div>
+                <div class="reveal d5" style="margin-top:70px">
+                    <div class="mock-label">결과: 작업표시줄의 일부처럼 보이는 내 창</div>
+                    <div class="tbmock">
+                        <span class="m-start"><b></b><b></b><b></b><b></b></span>
+                        <div class="m-app a1"></div><div class="m-app a2"></div><div class="m-app a3"></div>
+                        <div class="m-gap dim" style="border-style:solid;border-width:0">&nbsp;</div>
+                        <div class="m-widget">▷ 내 앱의 UI</div>
+                        <div class="m-tray"><span>한 A</span><span>12:58 PM</span></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ S13. 하지만 → 라이브러리로 ============ -->
+        <section class="slide" data-ch="2">
+            <div class="content">
+                <div class="eyebrow reveal">BUT…</div>
+                <h2 class="title reveal d1"><em>그대로 가져다 쓸 수는</em> 없었습니다</h2>
+                <ul class="bullets" style="margin-top:56px">
+                    <li class="reveal d2">만든 사람 스스로 <b>"해커톤급 코드"</b>라고 했고, 지금 Windows 11 빌드에선 위치·크기가 어긋남</li>
+                    <li class="reveal d3">시작 버튼 <b>중앙 정렬</b>도, <b>위젯 버튼</b>도 고려되지 않음</li>
+                    <li class="reveal d4">구조도 한 앱에 묶여 있어서 다른 앱에서 재사용 불가</li>
+                </ul>
+                <div class="card reveal d5" style="margin-top:64px;border-color:rgba(126,231,135,.45);background:rgba(126,231,135,.06)">
+                    <p style="font-size:30px;color:var(--text-primary)">그래서 <b style="color:var(--accent-2)">dotnet add package</b> 한 줄이면 되도록 라이브러리로 다시 만들었습니다. 그게 <b>Deskband11Lib</b>입니다</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ S14. CH3 디바이더 ============ -->
+        <section class="slide divider" data-ch="3">
+            <div class="glow"></div>
+            <div class="ghost">03</div>
+            <div class="content">
+                <div class="chnum reveal">CHAPTER 03</div>
+                <h2 class="reveal d1">작업표시줄에<br>창 붙이기</h2>
+                <div class="sub reveal d2">Win32로 창을 붙이고, UI Automation으로 자리를 잽니다</div>
+            </div>
+        </section>
+
+        <!-- ============ S15. 창 수술 (코드) ============ -->
+        <section class="slide" data-ch="3">
+            <div class="content">
+                <div class="eyebrow reveal">STEP 1 · WIN32</div>
+                <h2 class="title reveal d1">팝업 창을 <em>자식 창</em>으로 바꿉니다</h2>
+                <div class="cols" style="margin-top:46px">
+                    <div class="code-window reveal d2" style="flex:1.5">
+                        <div class="cw-head"><span class="fn">TaskbarContentHostBase.cs</span><span class="wbtn">─ ▢ ✕</span></div>
+                        <pre><span class="c">// 1. 창 스타일 교체: 최상위 팝업 → 자식 창</span>
+<span class="k">var</span> style = <span class="m">GetWindowLongPtr</span>(hwnd, <span class="t">GWL_STYLE</span>);
+style &amp;= ~(<span class="t">WS_POPUP</span> | <span class="t">WS_CAPTION</span> | <span class="t">WS_THICKFRAME</span>);
+style |= <span class="t">WS_CHILD</span>;
+<span class="m">SetWindowLongPtr</span>(hwnd, <span class="t">GWL_STYLE</span>, style);
+
+<span class="c">// 2. 작업표시줄의 자식으로 입양</span>
+<span class="m">SetParent</span>(hwnd, taskbarHwnd);  <span class="c">// Shell_TrayWnd</span>
+
+<span class="c">// 3. 빈 공간에 배치하고 클리핑</span>
+<span class="m">SetWindowPos</span>(hwnd, x, y, width, height, ...);
+<span class="m">SetWindowRgn</span>(hwnd, <span class="m">CreateRectRgn</span>(<span class="n">0</span>, <span class="n">0</span>, width, height), <span class="k">true</span>);</pre>
+                    </div>
+                    <div style="flex:1;display:flex;flex-direction:column;gap:26px;justify-content:center">
+                        <div class="card reveal d3"><h3>창은 그대로입니다</h3><p>XAML 트리도, 입력도, 렌더링도 전부 살아있는 진짜 창입니다. 스타일 비트만 바뀝니다</p></div>
+                        <div class="card reveal d4"><h3>되돌릴 수 있습니다</h3><p>Detach하면 원래 스타일과 부모를 복원해서 평범한 창으로 돌아갑니다</p></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ S16. 문제: HWND 트리에 버튼이 없다 ============ -->
+        <section class="slide" data-ch="3">
+            <div class="content">
+                <div class="eyebrow reveal">STEP 2 · THE PROBLEM</div>
+                <h2 class="title reveal d1">그런데 <em>버튼 폭을 알 수가 없습니다</em></h2>
+                <div class="cols" style="margin-top:52px;align-items:center">
+                    <div class="card reveal d2" style="flex:1.1">
+                        <div class="tree">
+                            <div class="tr"><span class="nm">Shell_TrayWnd</span><span class="cm">작업표시줄 본체</span></div>
+                            <div class="tr i1"><span class="cn">├─</span><span class="nm">TrayNotifyWnd</span><span class="cm">알림 영역</span></div>
+                            <div class="tr i1"><span class="cn">└─</span><span class="nm">ReBarWindow32</span></div>
+                            <div class="tr i2"><span class="cn">└─</span><span class="nm">MSTaskSwWClass</span></div>
+                            <div class="tr i3"><span class="cn">└─</span><span class="nm nd">MSTaskListWClass</span><span class="cm">앱 버튼 리스트</span></div>
+                        </div>
+                        <div class="tree-note">시작 버튼? 앱 버튼 폭? 위젯 버튼? &nbsp;→&nbsp; 어디에도 없음</div>
+                    </div>
+                    <div style="flex:1;display:flex;flex-direction:column;gap:26px">
+                        <div class="card reveal d3"><h3>버튼들은 XAML로 렌더링</h3><p>Windows 11 작업표시줄의 콘텐츠는 XAML 컴포지션이라 자식 HWND가 버튼별로 존재하지 않습니다</p></div>
+                        <div class="card reveal d4"><h3>그런데 폭은 알아야 합니다</h3><p>시작 버튼·앱 버튼과 겹치지 않는 "빈 공간"을 계산해야 하니까요</p></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ S17. 해법: UI Automation 측정 ============ -->
+        <section class="slide" data-ch="3">
+            <div class="content">
+                <div class="eyebrow reveal">STEP 2 · THE FIX</div>
+                <h2 class="title reveal d1">그래서 <em>UI Automation</em>으로 직접 쟀습니다</h2>
+                <div class="reveal d2" style="margin-top:60px">
+                    <div class="mock-label">UIA가 읽어낸 실제 지오메트리 (중앙 정렬 기준)</div>
+                    <div class="tbmock" style="height:96px">
+                        <div class="m-seg" style="width:110px;background:rgba(138,125,196,.25);border:1px solid rgba(138,125,196,.7);color:#c3b8f0">위젯</div>
+                        <div class="m-gap dim">왼쪽 빈 공간</div>
+                        <div class="m-seg" style="width:110px;background:rgba(76,194,255,.18);border:1px solid rgba(76,194,255,.7);color:var(--accent)">시작</div>
+                        <div class="m-seg" style="width:420px;background:rgba(232,179,75,.16);border:1px solid rgba(232,179,75,.6);color:var(--accent-warm)">앱 버튼 그룹</div>
+                        <div class="m-gap">오른쪽 빈 공간</div>
+                        <div class="m-seg" style="width:280px;background:rgba(126,231,135,.14);border:1px solid rgba(126,231,135,.55);color:var(--accent-2)">알림 영역 · 시계</div>
+                    </div>
+                </div>
+                <div class="chips reveal d4" style="margin-top:56px">
+                    <span class="chip"><b style="color:var(--accent)">AutomationId</b> = StartButton</span>
+                    <span class="chip"><b style="color:#c3b8f0">AutomationId</b> = WidgetsButton</span>
+                    <span class="chip"><b style="color:var(--accent-warm)">ControlType.Button</b> 연속 그룹 = 앱 버튼</span>
+                    <span class="chip"><b style="color:var(--accent-2)">SystemTrayIcon · NotifyItemIcon</b> = 알림 영역</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ S18. 정렬 감지 ============ -->
+        <section class="slide" data-ch="3">
+            <div class="content">
+                <div class="eyebrow reveal">STEP 3 · ALIGNMENT</div>
+                <h2 class="title reveal d1">정렬은 <em>레지스트리</em>가 알려줍니다</h2>
+                <div class="cols" style="margin-top:50px">
+                    <div class="code-window reveal d2" style="flex:1.5;align-self:flex-start">
+                        <div class="cw-head"><span class="fn">registry</span><span class="wbtn">─ ▢ ✕</span></div>
+                        <pre class="sm" style="font-size:20px">HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced
+
+<span class="t">TaskbarAl</span> = <span class="n">0</span>   <span class="c">→ 왼쪽 정렬</span>
+<span class="t">TaskbarAl</span> = <span class="n">1</span>   <span class="c">→ 중앙 정렬 (기본값)</span>
+
+<span class="c">// 값이 없다면? 시작 버튼의 X 좌표로 추론</span></pre>
+                    </div>
+                    <div style="flex:1.1;display:flex;flex-direction:column;gap:34px;justify-content:center">
+                        <div class="reveal d3">
+                            <div class="mock-label">중앙 정렬: 빈 공간이 양쪽에 생김</div>
+                            <div class="tbmock" style="height:66px">
+                                <div class="m-gap dim">&nbsp;</div>
+                                <span class="m-start"><b></b><b></b><b></b><b></b></span>
+                                <div class="m-app a1"></div><div class="m-app a2"></div>
+                                <div class="m-gap dim">&nbsp;</div>
+                                <div class="m-tray"><span>12:58</span></div>
+                            </div>
+                        </div>
+                        <div class="reveal d4">
+                            <div class="mock-label">왼쪽 정렬: 빈 공간은 오른쪽 하나</div>
+                            <div class="tbmock" style="height:66px">
+                                <span class="m-start"><b></b><b></b><b></b><b></b></span>
+                                <div class="m-app a1"></div><div class="m-app a2"></div>
+                                <div class="m-gap dim">&nbsp;</div>
+                                <div class="m-tray"><span>12:58</span></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <p class="lede reveal d5" style="margin-top:40px">정렬에 따라 <b>빈 공간이 생기는 위치가 완전히 달라집니다</b>. 원본 Deskband11이 놓친 부분이었죠.</p>
+            </div>
+        </section>
+
+        <!-- ============ S19. gap 선택 / Placement ============ -->
+        <section class="slide" data-ch="3">
+            <div class="content">
+                <div class="eyebrow reveal">STEP 4 · PLACEMENT</div>
+                <h2 class="title reveal d1">빈 공간 고르기: <em>Placement</em></h2>
+                <div class="reveal d2" style="margin-top:56px">
+                    <div class="mock-label">Placement = Auto: 중앙 정렬이면 더 넓은 쪽을 고릅니다</div>
+                    <div class="tbmock" style="height:92px">
+                        <div class="m-seg" style="width:90px;background:rgba(138,125,196,.25);border:1px solid rgba(138,125,196,.7);color:#c3b8f0">위젯</div>
+                        <div class="m-gap dim" style="flex:.55">좁은 쪽 ✕</div>
+                        <div class="m-seg" style="width:96px;background:rgba(76,194,255,.18);border:1px solid rgba(76,194,255,.7);color:var(--accent)">시작</div>
+                        <div class="m-seg" style="width:330px;background:rgba(232,179,75,.16);border:1px solid rgba(232,179,75,.6);color:var(--accent-warm)">앱 버튼 그룹</div>
+                        <div class="m-gap" style="flex:1.5">더 넓은 쪽 ✓ 여기에 배치</div>
+                        <div class="m-seg" style="width:230px;background:rgba(126,231,135,.14);border:1px solid rgba(126,231,135,.55);color:var(--accent-2)">알림 영역</div>
+                    </div>
+                </div>
+                <div class="chips reveal d4" style="margin-top:60px">
+                    <span class="chip on">Auto · 더 넓은 쪽 자동 선택</span>
+                    <span class="chip">LeftEdge · 왼쪽 끝(위젯 버튼 옆)</span>
+                    <span class="chip">BeforeNotificationArea · 알림 영역 앞</span>
+                    <span class="chip">BeforeStartButton · 시작 버튼 옆</span>
+                </div>
+                <p class="caption reveal d5" style="margin-top:36px">시작 버튼·앱 버튼·위젯 버튼·알림 영역과는 절대 겹치지 않습니다</p>
+            </div>
+        </section>
+
+        <!-- ============ S20. UIA는 UI 스레드 밖에서 ============ -->
+        <section class="slide" data-ch="3">
+            <div class="content">
+                <div class="eyebrow reveal">PERFORMANCE</div>
+                <h2 class="title reveal d1">측정이 <em>UI를 막지 않게</em></h2>
+                <div class="flow" style="margin-top:70px">
+                    <div class="step reveal d2"><h4>UIA 스캔</h4><p>ThreadPool에서 실행<br>느려도 괜찮은 곳으로 격리</p></div>
+                    <div class="arr reveal d2">→</div>
+                    <div class="step hot reveal d3"><h4>지오메트리 캐시</h4><p>측정 결과를 lock으로 보호해<br>스냅샷으로 보관</p></div>
+                    <div class="arr reveal d3">→</div>
+                    <div class="step reveal d4"><h4>레이아웃 타이머 (500ms)</h4><p>캐시만 읽어서 배치 계산<br>UI 스레드는 대기 없음</p></div>
+                </div>
+                <ul class="bullets" style="margin-top:76px">
+                    <li class="reveal d5">스캔이 실패하면? <b>이전 측정값을 그대로 유지</b>하고 위젯은 아무 일 없이 계속 동작<small>측정 실패가 기능 정지로 이어지지 않게 설계했습니다</small></li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- ============ S21. CH4 디바이더 ============ -->
+        <section class="slide divider" data-ch="4">
+            <div class="glow"></div>
+            <div class="ghost">04</div>
+            <div class="content">
+                <div class="chnum reveal">CHAPTER 04</div>
+                <h2 class="reveal d1">라이브러리로<br>만들기</h2>
+                <div class="sub reveal d2">설계 · 자동 복구 · 멀티 인스턴스 조율</div>
+            </div>
+        </section>
+
+        <!-- ============ S22. API 설계 ============ -->
+        <section class="slide" data-ch="4">
+            <div class="content">
+                <div class="eyebrow reveal">API DESIGN</div>
+                <h2 class="title reveal d1">목표: 설치 한 줄, <em>코드 세 줄</em></h2>
+                <div class="cols" style="margin-top:44px">
+                    <div style="flex:1.5;display:flex;flex-direction:column;gap:20px">
+                        <div class="code-window reveal d2">
+                            <div class="cw-head"><span class="fn">pwsh</span><span class="wbtn">─ ▢ ✕</span></div>
+                            <pre class="sm"><span class="c">$</span> dotnet add package <span class="s">Deskband11Lib.WinUI</span></pre>
+                        </div>
+                        <div class="code-window reveal d3">
+                            <div class="cw-head"><span class="fn">App.xaml.cs</span><span class="wbtn">─ ▢ ✕</span></div>
+                            <pre class="sm"><span class="k">var</span> window = <span class="k">new</span> <span class="t">MainWindow</span>();
+<span class="k">var</span> host = <span class="k">new</span> <span class="t">TaskbarContentHost</span>(window, rootElement,
+<span class="k">new</span> <span class="t">TaskbarContentHostOptions</span>
+{
+    PreferredWidth  = <span class="n">360</span>,
+    PreferredHeight = <span class="n">48</span>
+});
+
+<span class="k">await</span> host.<span class="m">AttachWhenLayoutReadyAsync</span>();
+window.<span class="m">Activate</span>();</pre>
+                        </div>
+                    </div>
+                    <div style="flex:1;display:flex;flex-direction:column;gap:26px;justify-content:center">
+                        <div class="card reveal d4"><h3>WinUI = WPF</h3><p>두 Facade의 API는 완전히 같고, Window와 FrameworkElement의 네임스페이스만 다릅니다</p></div>
+                        <div class="card reveal d5"><h3>옵션은 한 곳에</h3><p>폭·높이·배치·모니터·애니메이션 전부 TaskbarContentHostOptions 하나로</p></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ S23. 아키텍처 ============ -->
+        <section class="slide" data-ch="4">
+            <div class="content">
+                <div class="eyebrow reveal">ARCHITECTURE</div>
+                <h2 class="title reveal d1">Core 하나, <em>Facade</em> 여럿</h2>
+                <div style="margin-top:54px;display:flex;flex-direction:column;align-items:stretch;gap:0">
+                    <div class="cols reveal d2" style="gap:26px">
+                        <div class="card" style="flex:1;text-align:center;border-color:rgba(76,194,255,.45)"><h3>Deskband11Lib.WinUI</h3><p>Windows App SDK · WinUI 3 Facade</p></div>
+                        <div class="card" style="flex:1;text-align:center;border-color:rgba(76,194,255,.45)"><h3>Deskband11Lib.Wpf</h3><p>WPF Facade</p></div>
+                        <div class="card" style="flex:1;text-align:center;opacity:.55"><h3>(미래) Avalonia…</h3><p>Facade만 추가하면 확장</p></div>
+                    </div>
+                    <div class="reveal d3" style="text-align:center;padding:20px 0;color:var(--accent);font-size:24px">
+                        ▲ 창 핸들 · 디스패처 · 타이머만 제공 &nbsp;|&nbsp; <b>ITaskbarHostPlatformAdapter</b> &nbsp;|&nbsp; 레이아웃 결과만 수신 ▼
+                    </div>
+                    <div class="card reveal d4" style="border-color:rgba(126,231,135,.4);background:rgba(126,231,135,.05)">
+                        <h3 style="color:var(--accent-2)">Deskband11Lib.Core: UI 프레임워크 무관 엔진</h3>
+                        <div class="chips" style="margin-top:18px">
+                            <span class="chip">작업표시줄 창 탐색</span><span class="chip">레이아웃 계산</span><span class="chip">UIA 측정</span>
+                            <span class="chip">정렬 감지</span><span class="chip">Explorer 재시작 감시</span><span class="chip">멀티 인스턴스 슬롯 조율</span>
+                        </div>
+                    </div>
+                </div>
+                <p class="caption reveal d5" style="margin-top:36px">Facade가 얇을수록 새 프레임워크 지원이 쉬워집니다. 엔진은 하나뿐입니다</p>
+            </div>
+        </section>
+
+        <!-- ============ S24. 생명주기 / Explorer 재시작 ============ -->
+        <section class="slide" data-ch="4">
+            <div class="content">
+                <div class="eyebrow reveal">LIFECYCLE</div>
+                <h2 class="title reveal d1">Explorer는 <em>언젠가 재시작</em>됩니다</h2>
+                <div class="flow" style="margin-top:52px">
+                    <div class="step reveal d2"><h4>Attach</h4><p>작업표시줄에<br>창 입양</p></div>
+                    <div class="arr reveal d2">→</div>
+                    <div class="step reveal d3"><h4>감시 (1초 폴링)</h4><p>작업표시줄 HWND<br>생존 확인</p></div>
+                    <div class="arr reveal d3">→</div>
+                    <div class="step hot reveal d4"><h4>재시작 감지</h4><p>HWND가 통째로 교체됨<br>내 창은 이미 파괴된 뒤</p></div>
+                    <div class="arr reveal d4">→</div>
+                    <div class="step reveal d5"><h4>이벤트 통지</h4><p>TaskbarWindowRecreated<br>→ 앱이 창을 재생성</p></div>
+                </div>
+                <div class="code-window reveal d6" style="margin-top:52px;width:1100px">
+                    <div class="cw-head"><span class="fn">App.xaml.cs</span><span class="wbtn">─ ▢ ✕</span></div>
+                    <pre class="sm">host.TaskbarWindowRecreated += <span class="k">async</span> (_, _) =&gt;
+{
+    <span class="k">await</span> <span class="m">RecreateMainWindowAsync</span>();  <span class="c">// 창을 새로 만들어 다시 Attach</span>
+};</pre>
+                </div>
+                <p class="caption reveal d7" style="margin-top:32px">보조 모니터가 분리됐다 재연결되어도 자동으로 원래 작업표시줄로 복귀합니다</p>
+            </div>
+        </section>
+
+        <!-- ============ S25. 멀티 인스턴스 조율 ============ -->
+        <section class="slide" data-ch="4">
+            <div class="content">
+                <div class="eyebrow reveal">MULTI-INSTANCE</div>
+                <h2 class="title reveal d1">여러 앱이 <em>같은 자리</em>를 원한다면?</h2>
+                <div class="cols reveal d2" style="margin-top:48px;gap:26px">
+                    <div class="card" style="flex:1;text-align:center"><h3>BarPlay</h3><p>폭 380 요청</p></div>
+                    <div class="card" style="flex:1;text-align:center"><h3>PinStats</h3><p>폭 260 요청</p></div>
+                    <div class="card" style="flex:1;text-align:center"><h3>CLI Account Switcher</h3><p>폭 200 요청</p></div>
+                </div>
+                <div class="reveal d3" style="text-align:center;padding:18px 0;color:var(--text-dim);font-size:23px">▼ 서로의 존재를 모르는 별개 프로세스들 ▼</div>
+                <div class="card reveal d4" style="border-color:rgba(76,194,255,.45)">
+                    <h3 style="color:var(--accent)">공유 메모리(MMF) 슬롯 레지스트리 + Named Mutex</h3>
+                    <p style="margin-top:8px"><code style="font-family:var(--font-mono);font-size:21px">Local\Deskband11Lib.SlotRegistry</code>에 최대 64슬롯, 슬롯마다 HWND · 요청 폭 · 우선순위 · 하트비트 기록</p>
+                </div>
+                <ul class="bullets" style="margin-top:40px">
+                    <li class="reveal d5">중앙 서버도 IPC 채널도 없고, <b>죽은 프로세스는 IsWindow 검사로 자동 퇴출</b></li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- ============ S26. 슬롯 배분 ============ -->
+        <section class="slide" data-ch="4">
+            <div class="content">
+                <div class="eyebrow reveal">SLOT ALLOCATION</div>
+                <h2 class="title reveal d1"><em>Fixed-then-Stretch</em> 배분</h2>
+                <div class="reveal d2" style="margin-top:54px">
+                    <div class="mock-label">공간이 충분할 때: Fixed는 요청 폭 그대로, Stretch가 나머지를 나눠 가짐</div>
+                    <div class="alloc">
+                        <div class="seg f1" style="width:240px">CAS<br>Fixed 200</div>
+                        <div class="seg f2" style="width:400px">BarPlay<br>Fixed 380</div>
+                        <div class="seg st" style="flex:1">Stretch (PreferredWidth = double.MaxValue), 남는 공간 전부</div>
+                    </div>
+                </div>
+                <div class="reveal d3" style="margin-top:44px">
+                    <div class="mock-label">공간이 모자랄 때: 크기 조절을 허용한 Fixed는 요청 폭에 비례해 축소 (0이 되지는 않음)</div>
+                    <div class="alloc">
+                        <div class="seg f1" style="width:180px">CAS<br>200 → 150</div>
+                        <div class="seg f2" style="width:300px">BarPlay<br>380 → 285</div>
+                        <div class="seg used" style="flex:1">앱 버튼이 늘어나 좁아진 공간…</div>
+                    </div>
+                </div>
+                <ul class="bullets" style="margin-top:56px">
+                    <li class="reveal d4"><b>ManualSlotPriority</b>가 낮을수록 앞자리, 기본값 65535는 도착 순서대로</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- ============ S27. 애니메이션 ============ -->
+        <section class="slide" data-ch="4">
+            <div class="content">
+                <div class="eyebrow reveal">MOTION</div>
+                <h2 class="title reveal d1"><em>애니메이션</em>까지 신경 썼습니다</h2>
+                <div class="cols" style="margin-top:64px">
+                    <div class="card reveal d2" style="flex:1">
+                        <svg width="220" height="90" viewBox="0 0 220 90" style="margin-bottom:18px">
+                            <path d="M10,80 L210,80 M10,80 L10,10" stroke="rgba(255,255,255,.15)" stroke-width="2" fill="none"/>
+                            <path d="M10,80 C 30,18 90,10 210,10" stroke="#4cc2ff" stroke-width="4" fill="none" stroke-linecap="round"/>
+                            <path d="M10,80 L210,10" stroke="rgba(126,231,135,.5)" stroke-width="2.5" fill="none" stroke-dasharray="7 7"/>
+                        </svg>
+                        <h3>이징 25종 내장</h3>
+                        <p>Linear · Sine · Cubic · Expo · Circle… 기본은 CircleOut, Func&lt;double,double&gt;이면 뭐든 OK</p>
+                    </div>
+                    <div class="card reveal d3" style="flex:1">
+                        <div style="font-size:54px;font-weight:800;color:var(--accent);margin-bottom:16px">144<span style="font-size:26px;color:var(--text-dim)"> Hz</span></div>
+                        <h3>고주사율 모드</h3>
+                        <p>애니메이션 타이머를 60FPS 고정 대신 모니터의 실제 주사율에 맞춰 구동</p>
+                    </div>
+                    <div class="card reveal d4" style="flex:1">
+                        <div style="font-size:54px;font-weight:800;color:var(--accent-2);margin-bottom:16px">⇄</div>
+                        <h3>재배치도 부드럽게</h3>
+                        <p>옆 위젯이 등장·퇴장해 자리가 바뀌어도 순간이동 대신 슬라이드 애니메이션</p>
+                    </div>
+                </div>
+                <p class="caption reveal d5" style="margin-top:44px">작업표시줄의 일부처럼 보이려면, 움직임도 OS처럼 자연스러워야 합니다</p>
+            </div>
+        </section>
+
+        <!-- ============ S28. CH5 디바이더 ============ -->
+        <section class="slide divider" data-ch="5">
+            <div class="glow"></div>
+            <div class="ghost">05</div>
+            <div class="content">
+                <div class="chnum reveal">CHAPTER 05</div>
+                <h2 class="reveal d1">요즘 .NET으로<br>Win32 다루기</h2>
+                <div class="sub reveal d2">CsWin32 · 소스 생성 COM · NativeAOT</div>
+            </div>
+        </section>
+
+        <!-- ============ S29. CsWin32 ============ -->
+        <section class="slide" data-ch="5">
+            <div class="content">
+                <div class="eyebrow reveal">.NET INTEROP ①</div>
+                <h2 class="title reveal d1">P/Invoke를 <em>손으로 쓰지 않습니다</em></h2>
+                <div class="cols" style="margin-top:48px;align-items:center">
+                    <div class="code-window reveal d2" style="flex:1">
+                        <div class="cw-head"><span class="fn">NativeMethods.txt</span><span class="wbtn">─ ▢ ✕</span></div>
+                        <pre>SetParent
+SetWindowPos
+FindWindowEx
+GetWindowLongPtrW
+SetWindowRgn</pre>
+                    </div>
+                    <div class="arr reveal d3" style="font-size:34px;color:var(--accent);flex:none">→ 소스 생성 →</div>
+                    <div class="code-window reveal d3" style="flex:1.2">
+                        <div class="cw-head"><span class="fn">생성된 코드 사용</span><span class="wbtn">─ ▢ ✕</span></div>
+                        <pre><span class="t">PInvoke</span>.<span class="m">SetParent</span>(childHwnd, taskbarHwnd);
+<span class="c">// 시그니처·마샬링·SafeHandle까지
+// Microsoft.Windows.CsWin32가 전부 생성</span></pre>
+                    </div>
+                </div>
+                <ul class="bullets" style="margin-top:58px">
+                    <li class="reveal d4">Win32 메타데이터에서 <b>정확한 시그니처를 생성</b>해 손으로 쓴 P/Invoke의 마샬링 실수를 차단</li>
+                    <li class="reveal d5">생성된 코드는 <b>분석 가능한 정적 코드</b>라서 NativeAOT·트리밍과 궁합이 좋습니다</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- ============ S30. 소스 생성 COM ============ -->
+        <section class="slide" data-ch="5">
+            <div class="content">
+                <div class="eyebrow reveal">.NET INTEROP ②</div>
+                <h2 class="title reveal d1">UI Automation도 <em>소스 생성 COM</em>으로</h2>
+                <div class="cols" style="margin-top:48px;align-items:center">
+                    <div class="code-window reveal d2" style="flex:1.4">
+                        <div class="cw-head"><span class="fn">GeneratedUIAutomation.cs</span><span class="wbtn">─ ▢ ✕</span></div>
+                        <pre class="sm">[<span class="t">GeneratedComInterface</span>]
+[<span class="t">Guid</span>(<span class="s">"30cbe57d-d9d0-452a-ab13-7ac5ac4825ee"</span>)]
+<span class="k">internal partial interface</span> <span class="t">IUIAutomation</span>
+{
+    <span class="t">IUIAutomationElement</span> <span class="m">GetRootElement</span>();
+    <span class="t">IUIAutomationElement</span> <span class="m">ElementFromHandle</span>(<span class="k">nint</span> hwnd);
+    <span class="c">// COM vtable 호출 코드를 컴파일 타임에 생성</span>
+}</pre>
+                    </div>
+                    <div style="flex:1;display:flex;flex-direction:column;gap:26px">
+                        <div class="card reveal d3"><h3>System.Windows.Automation 없음</h3><p>무거운 관리 어셈블리 대신 UIA COM 인터페이스를 직접, 그것도 필요한 멤버만</p></div>
+                        <div class="card reveal d4"><h3>DisableRuntimeMarshalling</h3><p>런타임 마샬링을 제거해서 상호 운용이 전부 컴파일 타임에 결정됩니다</p></div>
+                    </div>
+                </div>
+                <p class="caption reveal d5" style="margin-top:40px">고전 COM 마샬러는 런타임에 코드를 만들어서 AOT와 같이 쓸 수 없습니다. 그래서 소스 생성을 택했습니다</p>
+            </div>
+        </section>
+
+        <!-- ============ S31. NativeAOT 결과 ============ -->
+        <section class="slide" data-ch="5">
+            <div class="content">
+                <div class="eyebrow reveal">NATIVEAOT</div>
+                <h2 class="title reveal d1">결과: <em>NativeAOT로 컴파일되는</em> 위젯</h2>
+                <div class="cols" style="margin-top:46px;align-items:center">
+                    <div style="flex:1;display:flex;flex-direction:column;gap:24px">
+                        <div class="card reveal d2"><h3>즉시 시작</h3><p>JIT 없는 네이티브 바이너리라 부팅 직후 뜨는 위젯에 잘 맞습니다</p></div>
+                        <div class="card reveal d3"><h3>가벼운 상주</h3><p>항상 떠 있는 앱이라 메모리 사용량을 최대한 줄였습니다</p></div>
+                        <div class="card reveal d4"><h3>IsAotCompatible</h3><p>라이브러리 전체가 AOT 분석 경고 0, 쓰는 앱도 안심하고 PublishAot 가능</p></div>
+                    </div>
+                    <figure class="imgcard reveal d3" style="width:800px;flex:none">
+                        <img src="BP-FS.jpg" alt="NativeAOT로 배포 중인 BarPlay가 데스크톱에서 실행 중인 모습">
+                        <figcaption><i></i>BarPlay: 실제로 NativeAOT로 빌드해 스토어에 배포 중</figcaption>
+                    </figure>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ S32. CH6 디바이더 ============ -->
+        <section class="slide divider" data-ch="6">
+            <div class="glow"></div>
+            <div class="ghost">06</div>
+            <div class="content">
+                <div class="chnum reveal">CHAPTER 06</div>
+                <h2 class="reveal d1">PoC에서<br>스토어까지</h2>
+                <div class="sub reveal d2">BarPlay · PinStats · CLI Account Switcher, 그리고 라이브 데모</div>
+            </div>
+        </section>
+
+        <!-- ============ S33. BarPlay ============ -->
+        <section class="slide" data-ch="6">
+            <div class="content">
+                <div class="eyebrow reveal">PROOF OF CONCEPT</div>
+                <h2 class="title reveal d1">BarPlay: <em>검증용으로 만든</em> 미디어 위젯</h2>
+                <div class="cols" style="margin-top:40px;align-items:center">
+                    <ul class="bullets" style="flex:1">
+                        <li class="reveal d2"><b>SMTC 연동</b>: Spotify, 브라우저, YouTube까지 시스템 미디어면 전부</li>
+                        <li class="reveal d3">위젯 클릭 → <b>플라이아웃</b>으로 탐색 슬라이더 · 설정까지</li>
+                        <li class="reveal d4">NativeAOT로 빌드해 <b>Microsoft Store까지 출시</b>, 라이브러리가 실전에서 쓸만한지 확인</li>
+                    </ul>
+                    <figure class="imgcard reveal d3" style="width:780px;flex:none">
+                        <img src="ATIC_DB11-TB+FY.jpg" alt="BarPlay 위젯과 펼쳐진 플라이아웃">
+                        <figcaption><i></i>작업표시줄 위젯 + 플라이아웃, 전부 WinUI 3 컨트롤 그대로</figcaption>
+                    </figure>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ S34. 기존 앱 이식 ============ -->
+        <section class="slide" data-ch="6">
+            <div class="content">
+                <div class="eyebrow reveal">ADOPTION</div>
+                <h2 class="title reveal d1">기존 앱에도 <em>며칠 만에</em> 붙습니다</h2>
+                <div class="cols" style="margin-top:38px">
+                    <figure class="imgcard reveal d2" style="flex:1">
+                        <img src="ATIC_PS-TB+FY.jpg" alt="PinStats 작업표시줄 위젯과 하드웨어 상세 팝업">
+                        <figcaption><i class="g"></i>PinStats: CPU·GPU·메모리 링이 작업표시줄에 상주</figcaption>
+                    </figure>
+                    <figure class="imgcard reveal d3" style="flex:1">
+                        <img src="ATIC_CAS.jpg" alt="CLI Account Switcher 위젯과 활성 계정 할당량 팝업">
+                        <figcaption><i></i>CLI Account Switcher: AI CLI 사용량이 항상 눈앞에</figcaption>
+                    </figure>
+                </div>
+                <p class="lede reveal d4" style="margin-top:34px">두 앱 모두 통합 코드는 <b>옵션 몇 개 + AttachWhenLayoutReadyAsync 한 줄</b>이 전부였습니다.</p>
+            </div>
+        </section>
+
+        <!-- ============ S35. 라이브 데모 ============ -->
+        <section class="slide" data-ch="6">
+            <div class="content" style="display:flex;flex-direction:column;justify-content:center">
+                <div class="eyebrow reveal">SHOWTIME</div>
+                <div class="demo-big reveal d1" style="margin-top:20px">LIVE DEMO</div>
+                <div class="demo-list">
+                    <div class="card reveal d2">
+                        <div class="dnum">DEMO 01</div>
+                        <h3>Explorer 강제 종료</h3>
+                        <p><span class="kbd">taskkill /f /im explorer.exe</span><br><br>작업표시줄이 죽어도 위젯은 스스로 돌아옵니다</p>
+                    </div>
+                    <div class="card reveal d3">
+                        <div class="dnum">DEMO 02</div>
+                        <h3>정렬 전환</h3>
+                        <p>시작 버튼을 중앙 ↔ 왼쪽으로 바꾸면, 위젯이 애니메이션과 함께 새 빈 공간으로 이사합니다</p>
+                    </div>
+                    <div class="card reveal d4">
+                        <div class="dnum">DEMO 03</div>
+                        <h3>슬롯 조정</h3>
+                        <p>위젯 두 개를 동시에 띄우면 서로 겹치지 않고 공간을 나눠 갖습니다</p>
+                    </div>
+                </div>
+                <p class="caption reveal d5" style="margin-top:46px">데모의 신이 노하시면 준비된 영상으로 대체합니다 :)</p>
+            </div>
+        </section>
+
+        <!-- ============ S36. 한계와 교훈 ============ -->
+        <section class="slide" data-ch="7">
+            <div class="content">
+                <div class="eyebrow reveal">LIMITATIONS</div>
+                <h2 class="title reveal d1">한계와 <em>배운 점</em></h2>
+                <ul class="bullets" style="margin-top:64px">
+                    <li class="reveal d2">여긴 <b>문서화되지 않은 영역</b>입니다. Windows 업데이트가 언제든 깨뜨릴 수 있습니다<small>공식 API가 없는 곳이니 감수해야 하는 부분입니다</small></li>
+                    <li class="reveal d3">그래서 <b>감시와 복구를 처음부터 설계에 내장</b>했습니다<small>폴링 감시 · TaskbarWindowRecreated · 모니터 재연결 자동 복귀, 깨질 수 있다는 전제로 설계했습니다</small></li>
+                    <li class="reveal d4">UIA 기반 측정은 내부 구현 변화에 <b>비교적 유연</b>합니다<small>AutomationId는 접근성 계약이라 픽셀 좌표 하드코딩보다 오래 살아남습니다</small></li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- ============ S37. 클로징 ============ -->
+        <section class="slide" data-ch="7">
+            <div class="content" style="display:flex;flex-direction:column;justify-content:center">
+                <div class="eyebrow reveal">WRAP-UP</div>
+                <div class="statement reveal d1" style="margin-top:26px">여러분도 <span class="gr" style="background:linear-gradient(92deg,var(--accent),var(--accent-2));-webkit-background-clip:text;background-clip:text;color:transparent">작업표시줄 위젯</span>을<br>하나 만들어 보세요</div>
+                <div class="links">
+                    <div class="lk reveal d3"><span class="tag">GitHub</span><code>github.com/airtaxi/Deskband11Lib</code><span class="caption">MIT · 샘플 프로젝트 복사로 바로 시작</span></div>
+                    <div class="lk reveal d4"><span class="tag">NuGet</span><code>Deskband11Lib.WinUI · Deskband11Lib.Wpf</code></div>
+                    <div class="lk reveal d5"><span class="tag">Store</span><code>BarPlay · CLI Account Switcher</code><span class="caption">전부 이 라이브러리로 만든 앱들</span></div>
+                </div>
+                <p class="lede reveal d6" style="margin-top:56px"><b>감사합니다</b>. 질문 받겠습니다.<br>이호원 · airtaxi</p>
+            </div>
+        </section>
+
+        <!-- SLIDES-END -->
+
+        <!-- 상단 진행 바 -->
+        <div class="deck-progress"><i id="progressBar"></i></div>
+
+        <!-- 하단 고정 작업표시줄 크롬 (덱 시그니처) -->
+        <nav class="deck-taskbar" id="deckTaskbar" aria-label="챕터 내비게이션">
+            <div class="dtb-left">
+                <span class="winlogo"><b></b><b></b><b></b><b></b></span>
+                <span class="dtb-brand">Deskband11Lib</span>
+            </div>
+            <div class="dtb-center" id="chapterIcons">
+                <button class="ch-ico" data-ch="1" title="사라진 데스크밴드">1</button>
+                <button class="ch-ico" data-ch="2" title="알고 보니 그냥 창">2</button>
+                <button class="ch-ico" data-ch="3" title="작업표시줄에 창 붙이기">3</button>
+                <button class="ch-ico" data-ch="4" title="라이브러리로 만들기">4</button>
+                <button class="ch-ico" data-ch="5" title="요즘 .NET으로 Win32 다루기">5</button>
+                <button class="ch-ico" data-ch="6" title="PoC에서 스토어까지">6</button>
+                <button class="ch-ico" data-ch="7" title="마무리">7</button>
+                <div class="dtb-widget" id="tbWidget">
+                    <div class="art"></div>
+                    <div class="meta"><div class="t" id="tbWidgetTitle">Deskband11Lib</div><div class="d" id="tbWidgetDesc">Taskbar Widget · Attached</div></div>
+                </div>
+            </div>
+            <div class="dtb-tray">
+                <span class="ime">한</span>
+                <span class="bars"><b></b><b></b><b></b><b></b></span>
+                <div class="clock"><span id="slideCounter">1 / 37</span><small>Dot4 밋업</small></div>
+            </div>
+        </nav>
+    </main>
+</div>
+
+<!-- 인라인 편집 트리거 (좌상단 핫존 + 토글 버튼) -->
+<div class="edit-hotzone" id="editHotzone"></div>
+<button class="edit-toggle" id="editToggle" title="편집 모드 (E)">✏️</button>
+
+<script>
+/* ===========================================
+   슬라이드 컨트롤러
+   - 키보드(←→/Space/PgUp·Dn/Home/End), 휠, 터치 스와이프
+   - 하단 작업표시줄 챕터 아이콘 = 해당 챕터로 점프
+   =========================================== */
+const CHAPTER_INFO = {
+    0: { t: 'Deskband11Lib', d: 'Taskbar Widget · Attached' },
+    1: { t: '01 · 사라진 데스크밴드', d: 'Windows 95 → 10 → 11' },
+    2: { t: '02 · 알고 보니 그냥 창', d: 'zadjii/Deskband11' },
+    3: { t: '03 · 작업표시줄에 창 붙이기', d: 'Win32 + UI Automation' },
+    4: { t: '04 · 라이브러리로 만들기', d: 'Core + Facade' },
+    5: { t: '05 · 요즘 .NET과 Win32', d: 'CsWin32 · NativeAOT' },
+    6: { t: '06 · PoC에서 스토어까지', d: 'BarPlay · PinStats · CAS' },
+    7: { t: '07 · 마무리', d: '한계와 배운 점' }
+};
+
+class SlidePresentation {
+    constructor() {
+        this.slides = document.querySelectorAll('.slide');
+        this.stage = document.getElementById('deckStage');
+        this.current = 0;
+        this.wheelLock = 0;
+        this.chapterStart = {};
+        this.slides.forEach((s, i) => {
+            const ch = +(s.dataset.ch || 0);
+            if (!(ch in this.chapterStart)) this.chapterStart[ch] = i;
+        });
+        this.setupScale();
+        this.setupKeys();
+        this.setupWheel();
+        this.setupTouch();
+        this.setupChapterIcons();
+        this.show(0);
+    }
+    setupScale() {
+        const fit = () => {
+            const f = Math.min(innerWidth / 1920, innerHeight / 1080);
+            const x = (innerWidth - 1920 * f) / 2, y = (innerHeight - 1080 * f) / 2;
+            this.stage.style.transform = `translate(${x}px, ${y}px) scale(${f})`;
+        };
+        fit(); addEventListener('resize', fit);
+    }
+    setupKeys() {
+        addEventListener('keydown', e => {
+            if (document.body.classList.contains('editing') || e.target.isContentEditable) return;
+            if (['ArrowRight', ' ', 'PageDown'].includes(e.key)) { e.preventDefault(); this.show(this.current + 1); }
+            else if (['ArrowLeft', 'PageUp'].includes(e.key)) { e.preventDefault(); this.show(this.current - 1); }
+            else if (e.key === 'Home') this.show(0);
+            else if (e.key === 'End') this.show(this.slides.length - 1);
+        });
+    }
+    setupWheel() {
+        addEventListener('wheel', e => {
+            if (document.body.classList.contains('editing')) return;
+            const now = Date.now();
+            if (now - this.wheelLock < 550 || Math.abs(e.deltaY) < 12) return;
+            this.wheelLock = now;
+            this.show(this.current + (e.deltaY > 0 ? 1 : -1));
+        }, { passive: true });
+    }
+    setupTouch() {
+        let sx = 0;
+        addEventListener('touchstart', e => sx = e.touches[0].clientX, { passive: true });
+        addEventListener('touchend', e => {
+            const dx = e.changedTouches[0].clientX - sx;
+            if (Math.abs(dx) > 60) this.show(this.current + (dx < 0 ? 1 : -1));
+        }, { passive: true });
+    }
+    setupChapterIcons() {
+        document.querySelectorAll('.ch-ico').forEach(b => {
+            b.addEventListener('click', () => {
+                const idx = this.chapterStart[+b.dataset.ch];
+                if (idx !== undefined) this.show(idx);
+            });
+        });
+    }
+    show(i) {
+        this.current = Math.max(0, Math.min(i, this.slides.length - 1));
+        this.slides.forEach((s, j) => {
+            s.classList.toggle('active', j === this.current);
+            s.classList.toggle('visible', j === this.current);
+        });
+        const ch = +(this.slides[this.current].dataset.ch || 0);
+        document.querySelectorAll('.ch-ico').forEach(b => b.classList.toggle('on', +b.dataset.ch === ch));
+        const info = CHAPTER_INFO[ch] || CHAPTER_INFO[0];
+        document.getElementById('tbWidgetTitle').textContent = info.t;
+        document.getElementById('tbWidgetDesc').textContent = info.d;
+        document.getElementById('slideCounter').textContent = `${this.current + 1} / ${this.slides.length}`;
+        document.getElementById('progressBar').style.width = `${(this.current + 1) / this.slides.length * 100}%`;
+    }
+}
+
+/* ===========================================
+   인라인 편집기 — E 키 또는 좌상단 핫존
+   localStorage 자동 저장, Ctrl+S = HTML 내보내기
+   =========================================== */
+const editor = {
+    isActive: false,
+    KEY: 'db11l-deck-edits-v1',
+    toggleEditMode() {
+        this.isActive = !this.isActive;
+        document.body.classList.toggle('editing', this.isActive);
+        document.getElementById('editToggle').classList.toggle('active', this.isActive);
+        document.querySelectorAll('.slide').forEach(s => s.setAttribute('contenteditable', this.isActive ? 'true' : 'false'));
+        if (!this.isActive) this.save();
+    },
+    save() {
+        try {
+            const data = [...document.querySelectorAll('.slide')].map(s => s.innerHTML);
+            localStorage.setItem(this.KEY, JSON.stringify(data));
+        } catch (e) { /* 저장 실패는 무시 */ }
+    },
+    restore() {
+        try {
+            const raw = localStorage.getItem(this.KEY);
+            if (!raw) return;
+            const data = JSON.parse(raw);
+            const slides = document.querySelectorAll('.slide');
+            if (data.length === slides.length) slides.forEach((s, i) => s.innerHTML = data[i]);
+        } catch (e) { /* 복원 실패는 무시 */ }
+    },
+    exportFile() {
+        document.querySelectorAll('.slide').forEach(s => s.removeAttribute('contenteditable'));
+        const blob = new Blob(['<!DOCTYPE html>\n' + document.documentElement.outerHTML], { type: 'text/html' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'deskband11-slides-edited.html';
+        a.click();
+        if (this.isActive) document.querySelectorAll('.slide').forEach(s => s.setAttribute('contenteditable', 'true'));
+    }
+};
+
+const hotzone = document.getElementById('editHotzone');
+const editToggle = document.getElementById('editToggle');
+let hideTimeout = null;
+hotzone.addEventListener('mouseenter', () => { clearTimeout(hideTimeout); editToggle.classList.add('show'); });
+hotzone.addEventListener('mouseleave', () => {
+    hideTimeout = setTimeout(() => { if (!editor.isActive) editToggle.classList.remove('show'); }, 400);
+});
+editToggle.addEventListener('mouseenter', () => clearTimeout(hideTimeout));
+editToggle.addEventListener('mouseleave', () => {
+    hideTimeout = setTimeout(() => { if (!editor.isActive) editToggle.classList.remove('show'); }, 400);
+});
+editToggle.addEventListener('click', () => editor.toggleEditMode());
+hotzone.addEventListener('click', () => editor.toggleEditMode());
+addEventListener('keydown', e => {
+    if ((e.key === 'e' || e.key === 'E') && !e.target.isContentEditable) editor.toggleEditMode();
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); editor.save(); editor.exportFile(); }
+});
+document.addEventListener('input', e => { if (editor.isActive) editor.save(); });
+
+editor.restore();
+new SlidePresentation();
+
+</script>
+</body>
+</html>

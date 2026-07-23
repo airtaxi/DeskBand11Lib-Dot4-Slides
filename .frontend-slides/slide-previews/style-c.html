@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deskband11Lib — Title</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<style>
+/* === BASE / FIXED STAGE === */
+html,body{margin:0;padding:0;height:100%;background:#05070a;overflow:hidden}
+.viewport{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+.stage{width:1920px;height:1080px;flex:none;position:relative;overflow:hidden;transform-origin:center center;
+  background:#0a0d12;font-family:'Pretendard Variable',Pretendard,sans-serif;color:#e8edf4}
+
+/* === MICA ATMOSPHERE === */
+.mica{position:absolute;inset:0;pointer-events:none;opacity:0;animation:fadein 1s ease .1s both;
+  background:
+    radial-gradient(1200px 800px at 18% 8%,rgba(46,88,134,.42),transparent 65%),
+    radial-gradient(1000px 700px at 88% 96%,rgba(64,110,52,.25),transparent 65%),
+    radial-gradient(700px 500px at 70% 30%,rgba(40,60,90,.20),transparent 70%)}
+.noise{position:absolute;inset:0;pointer-events:none;opacity:.045;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)'/%3E%3C/svg%3E")}
+
+/* === TOP CHROME === */
+.topbar{position:absolute;top:56px;left:120px;right:120px;display:flex;justify-content:space-between;align-items:center;z-index:4;
+  opacity:0;animation:fadein .8s ease .5s both}
+.brand{display:flex;align-items:center;gap:16px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);
+  border-radius:99px;padding:12px 28px 12px 14px;backdrop-filter:blur(20px)}
+.brand .logo{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#4cc2ff,#7ee787)}
+.brand .name{font-size:25px;font-weight:650;letter-spacing:.2px}
+.conf{font-size:24px;color:#8b96a5;letter-spacing:1.5px}
+
+/* === HERO === */
+.hero{position:absolute;left:120px;top:250px;z-index:4}
+.eyebrow{display:inline-flex;align-items:center;gap:14px;font-size:23px;font-weight:600;letter-spacing:3.5px;color:#4cc2ff;
+  opacity:0;animation:rise .8s cubic-bezier(.16,1,.3,1) .35s both}
+.eyebrow::before{content:"";width:44px;height:2px;background:#4cc2ff}
+.h1{margin:34px 0 0;font-size:98px;line-height:1.22;font-weight:800;letter-spacing:-2.5px}
+.h1 .line{display:block;opacity:0;transform:translateY(36px)}
+.h1 .line:nth-child(1){animation:rise .9s cubic-bezier(.16,1,.3,1) .5s both}
+.h1 .line:nth-child(2){animation:rise .9s cubic-bezier(.16,1,.3,1) .65s both}
+.h1 .line:nth-child(3){animation:rise .9s cubic-bezier(.16,1,.3,1) .8s both;
+  background:linear-gradient(92deg,#4cc2ff 10%,#7ee787 90%);-webkit-background-clip:text;background-clip:text;color:transparent}
+.sub{margin-top:40px;font-size:30px;color:#9aa4b2;font-weight:450;opacity:0;animation:rise .9s cubic-bezier(.16,1,.3,1) 1s both}
+.sub b{color:#d7dee8;font-weight:650}
+.speaker{margin-top:62px;display:flex;align-items:center;gap:22px;opacity:0;animation:rise .9s cubic-bezier(.16,1,.3,1) 1.15s both}
+.avatar{width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,#1f6feb,#4cc2ff);
+  display:grid;place-items:center;font-size:28px;font-weight:800;color:#04121f}
+.speaker .who{font-size:29px;font-weight:650}
+.speaker .who span{display:block;font-size:22px;font-weight:450;color:#8b96a5;margin-top:6px}
+
+/* === WINDOWS 11 TASKBAR (signature) === */
+.taskbar{position:absolute;left:0;right:0;bottom:0;height:92px;z-index:6;
+  background:rgba(18,24,32,.78);backdrop-filter:blur(30px);border-top:1px solid rgba(255,255,255,.08);
+  display:flex;align-items:center;padding:0 36px;
+  transform:translateY(100%);animation:tbup .7s cubic-bezier(.16,1,.3,1) 1.35s both}
+.tb-center{position:absolute;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:18px}
+.winlogo{display:grid;grid-template-columns:15px 15px;grid-template-rows:15px 15px;gap:3px;margin-right:8px}
+.winlogo b{background:#4cc2ff;border-radius:1.5px}
+.appico{width:44px;height:44px;border-radius:10px;display:grid;place-items:center;background:rgba(255,255,255,.07)}
+.appico i{width:22px;height:22px;border-radius:6px}
+.appico:nth-of-type(1) i{background:#8a7dc4}.appico:nth-of-type(2) i{background:#e8b34b}
+.appico:nth-of-type(3) i{background:#5b9bd5;border-radius:50%}.appico:nth-of-type(4) i{background:#c75d5d}
+.widget{display:flex;align-items:center;gap:16px;height:64px;padding:0 24px 0 12px;margin-left:14px;border-radius:10px;
+  background:rgba(255,255,255,.06);border:1px solid rgba(76,194,255,.55);
+  opacity:0;transform:translateY(-130px) scale(.92);
+  animation:dock .8s cubic-bezier(.34,1.4,.64,1) 2s both,glow 1.6s ease 2.9s 2}
+.widget .art{width:42px;height:42px;border-radius:8px;background:linear-gradient(135deg,#4cc2ff,#7ee787)}
+.widget .meta{line-height:1.25}
+.widget .meta .t{font-size:19px;font-weight:650}
+.widget .meta .d{font-size:15px;color:#8b96a5}
+.widget .ctrl{display:flex;gap:16px;font-size:21px;color:#d7dee8;margin-left:6px}
+.tb-tray{margin-left:auto;display:flex;align-items:center;gap:26px;color:#c6cdd6;font-size:20px}
+.tb-tray .clock{text-align:right;font-size:18px;line-height:1.35;color:#c6cdd6}
+.bars{display:flex;align-items:flex-end;gap:3px}
+.bars b{width:4px;background:#c6cdd6;border-radius:1px}
+.bars b:nth-child(1){height:6px}.bars b:nth-child(2){height:10px}.bars b:nth-child(3){height:14px}.bars b:nth-child(4){height:18px}
+
+/* === CALLOUT ARROW to widget === */
+.callout{position:absolute;bottom:130px;left:50%;transform:translateX(120px);z-index:5;color:#4cc2ff;font-size:22px;font-weight:600;
+  display:flex;flex-direction:column;align-items:flex-start;gap:10px;opacity:0;animation:fadein .8s ease 2.7s both}
+.callout .stem{width:2px;height:52px;background:linear-gradient(#4cc2ff,transparent);margin-left:8px}
+
+/* === KEYFRAMES === */
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+@keyframes rise{from{opacity:0;transform:translateY(36px)}to{opacity:1;transform:translateY(0)}}
+@keyframes tbup{from{transform:translateY(100%)}to{transform:translateY(0)}}
+@keyframes dock{from{opacity:0;transform:translateY(-130px) scale(.92)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes glow{0%,100%{box-shadow:0 0 0 rgba(76,194,255,0)}50%{box-shadow:0 0 34px rgba(76,194,255,.45)}}
+
+@media (prefers-reduced-motion: reduce){
+  *{animation-duration:.01s !important;animation-delay:0s !important}
+}
+</style>
+</head>
+<body>
+<div class="viewport">
+  <div class="stage">
+    <div class="mica"></div>
+    <div class="noise"></div>
+
+    <div class="topbar">
+      <div class="brand"><div class="logo"></div><div class="name">Deskband11Lib</div></div>
+      <div class="conf">.NET CONFERENCE 2026</div>
+    </div>
+
+    <div class="hero">
+      <div class="eyebrow">WINDOWS 11 · TASKBAR · WIN32 × WINUI × WPF</div>
+      <h1 class="h1">
+        <span class="line">윈도우 11에서 사라진</span>
+        <span class="line">작업표시줄 데스크밴드,</span>
+        <span class="line">WinUI·WPF로 되살려봤습니다</span>
+      </h1>
+      <div class="sub"><b>SetParent</b> 한 번으로 시작된 라이브러리 개발기 — 그리고 스토어에 올라간 위젯들</div>
+      <div class="speaker">
+        <div class="avatar">H</div>
+        <div class="who">이호원 · Howon Lee<span>airtaxi · Microsoft Store 앱 개발자</span></div>
+      </div>
+    </div>
+
+    <div class="callout">오늘의 주인공<div class="stem"></div></div>
+
+    <div class="taskbar">
+      <div class="tb-center">
+        <span class="winlogo"><b></b><b></b><b></b><b></b></span>
+        <div class="appico"><i></i></div>
+        <div class="appico"><i></i></div>
+        <div class="appico"><i></i></div>
+        <div class="appico"><i></i></div>
+        <div class="widget">
+          <div class="art"></div>
+          <div class="meta"><div class="t">Deskband11Lib</div><div class="d">Taskbar Widget · Attached</div></div>
+          <div class="ctrl"><span>‹</span><span>▷</span><span>›</span></div>
+        </div>
+      </div>
+      <div class="tb-tray">
+        <span>한</span>
+        <span class="bars"><b></b><b></b><b></b><b></b></span>
+        <span>▭</span>
+        <div class="clock">1:30 PM<br>2026-07-23</div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+function fit(){var s=Math.min(innerWidth/1920,innerHeight/1080);document.querySelector('.stage').style.transform='scale('+s+')';}
+addEventListener('resize',fit);fit();
+</script>
+</body>
+</html>

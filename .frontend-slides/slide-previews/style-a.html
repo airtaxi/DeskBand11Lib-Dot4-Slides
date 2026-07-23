@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deskband11Lib — Title</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Nanum+Gothic+Coding:wght@400;700&display=swap" rel="stylesheet">
+<style>
+/* === BASE / FIXED STAGE === */
+html,body{margin:0;padding:0;height:100%;background:#010409;overflow:hidden}
+.viewport{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+.stage{width:1920px;height:1080px;flex:none;position:relative;overflow:hidden;transform-origin:center center;
+  background:#0d1117;font-family:'JetBrains Mono','Nanum Gothic Coding',monospace}
+
+/* === ATMOSPHERE === */
+.glow{position:absolute;width:1100px;height:800px;left:-220px;top:-260px;pointer-events:none;
+  background:radial-gradient(closest-side,rgba(57,211,83,.10),transparent 70%)}
+.scanlines{position:absolute;inset:0;pointer-events:none;z-index:9;opacity:.05;
+  background:repeating-linear-gradient(0deg,#fff 0 1px,transparent 1px 4px)}
+.gridbg{position:absolute;inset:0;pointer-events:none;opacity:.35;
+  background:linear-gradient(rgba(48,54,61,.22) 1px,transparent 1px),linear-gradient(90deg,rgba(48,54,61,.22) 1px,transparent 1px);
+  background-size:96px 96px}
+
+/* === TERMINAL CHROME === */
+.termbar{position:absolute;top:0;left:0;right:0;height:72px;background:#161b22;border-bottom:1px solid #30363d;
+  display:flex;align-items:center;padding:0 40px;gap:14px;z-index:3}
+.dot{width:20px;height:20px;border-radius:50%}
+.dot.r{background:#ff5f56}.dot.y{background:#ffbd2e}.dot.g{background:#27c93f}
+.termtitle{flex:1;text-align:center;color:#8b949e;font-size:24px;letter-spacing:.5px}
+
+/* === CONTENT === */
+.body{position:absolute;top:72px;left:0;right:0;bottom:0;padding:96px 140px;z-index:2}
+.cmdline{font-size:34px;color:#e6edf3;display:flex;align-items:baseline;gap:18px}
+.prompt{color:#39d353;font-weight:600}
+.cmd{display:inline-block;overflow:hidden;white-space:nowrap;width:38ch;vertical-align:bottom;
+  animation:typing 1.4s steps(38,end) .4s both}
+.resp{margin-top:26px;font-size:27px;color:#8b949e;opacity:0;animation:fadein .5s ease 2.0s both}
+.resp b{color:#39d353;font-weight:600}
+
+.titleblock{margin-top:110px}
+.tline{display:flex;align-items:baseline;gap:28px;opacity:0;transform:translateY(24px);
+  animation:rise .7s cubic-bezier(.16,1,.3,1) both}
+.tline:nth-child(1){animation-delay:2.4s}
+.tline:nth-child(2){animation-delay:2.62s}
+.tline:nth-child(3){animation-delay:2.84s}
+.chev{color:#1f6feb;font-size:56px;font-weight:800;opacity:.85}
+.tl{font-family:'JetBrains Mono','Nanum Gothic Coding',monospace;font-weight:800;font-size:88px;line-height:1.32;color:#e6edf3;letter-spacing:-1px}
+.tl.green{color:#39d353}
+.cursor{display:inline-block;width:44px;height:78px;background:#39d353;margin-left:22px;vertical-align:-8px;
+  animation:blink 1.05s steps(1) infinite 3.4s;opacity:0}
+
+.comment{margin-top:66px;font-size:28px;color:#484f58;opacity:0;animation:fadein .6s ease 3.3s both}
+
+/* === FOOTER === */
+.footer{position:absolute;left:140px;right:140px;bottom:64px;display:flex;justify-content:space-between;align-items:center;
+  border-top:1px solid #21262d;padding-top:34px;opacity:0;animation:fadein .7s ease 3.5s both;z-index:2}
+.footer .who{font-size:27px;color:#e6edf3}
+.footer .who span{color:#8b949e}
+.footer .conf{font-size:25px;color:#39d353;letter-spacing:2px}
+
+/* === KEYFRAMES === */
+@keyframes typing{from{width:0}to{width:38ch}}
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+@keyframes rise{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
+@keyframes blink{0%,49%{opacity:1}50%,100%{opacity:0}}
+
+@media (prefers-reduced-motion: reduce){
+  *{animation-duration:.01s !important;animation-delay:0s !important}
+  .cursor{opacity:1;animation:none}
+}
+</style>
+</head>
+<body>
+<div class="viewport">
+  <div class="stage">
+    <div class="gridbg"></div>
+    <div class="glow"></div>
+    <div class="termbar">
+      <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
+      <div class="termtitle">airtaxi@win11 : ~/Deskband11Lib — pwsh</div>
+    </div>
+    <div class="body">
+      <div class="cmdline"><span class="prompt">$</span><span class="cmd">dotnet add package Deskband11Lib.WinUI</span></div>
+      <div class="resp">info : 패키지 <b>Deskband11Lib.WinUI 1.3.8</b> 설치 완료 — 작업표시줄에 연결할 준비가 되었습니다.</div>
+      <div class="titleblock">
+        <div class="tline"><span class="chev">&gt;</span><span class="tl">윈도우 11에서 사라진</span></div>
+        <div class="tline"><span class="chev">&gt;</span><span class="tl">작업표시줄 데스크밴드,</span></div>
+        <div class="tline"><span class="chev">&gt;</span><span class="tl green">WinUI·WPF 기반으로 되살려봤습니다<span class="cursor"></span></span></div>
+      </div>
+      <div class="comment"># SetParent 한 번으로 시작된 라이브러리 개발기</div>
+    </div>
+    <div class="footer">
+      <div class="who">이호원 <span>· Howon Lee (airtaxi)</span></div>
+      <div class="conf">.NET CONFERENCE 2026</div>
+    </div>
+    <div class="scanlines"></div>
+  </div>
+</div>
+<script>
+function fit(){var s=Math.min(innerWidth/1920,innerHeight/1080);document.querySelector('.stage').style.transform='scale('+s+')';}
+addEventListener('resize',fit);fit();
+</script>
+</body>
+</html>
