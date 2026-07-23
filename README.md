@@ -35,6 +35,12 @@ Windows 11이 작업표시줄을 XAML 기반으로 새로 만들면서, Windows 
 
 Windows를 좋아해서 C#과 .NET을 시작했고, 지금은 WinUI·Uno Platform으로 Windows 앱을 만듭니다. 오픈소스 Windows 앱을 15개 넘게 공개했습니다 — [github.com/airtaxi](https://github.com/airtaxi)
 
+## 함께하기
+
+**닷넷코리아 오픈채팅방** — [open.kakao.com/o/gaXg2I5g](https://open.kakao.com/o/gaXg2I5g)
+
+Dot4 운영진들도 함께 있는 곳이고, .NET 관련 정보와 한국 개발자 교류를 이어갈 수 있습니다.
+
 ## 라이선스
 
 MIT License. 발표 시 인용한 타인 프로젝트(zadjii/Deskband11 등)의 자료는 각각의 라이선스를 따릅니다.
