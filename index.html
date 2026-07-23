@@ -267,6 +267,40 @@ body.editing [contenteditable="true"]:hover { outline: 1px dashed rgba(126,231,1
 /* ===========================================
    슬라이드별 전용 스타일
    =========================================== */
+/* S0 시작 화면 */
+.s-start .start-wrap { position: absolute; inset: 0; display: flex; flex-direction: column;
+    justify-content: center; align-items: center; text-align: center; padding: 0 200px; }
+.s-start .start-brand { display: flex; align-items: center; gap: 16px; background: var(--card);
+    border: 1px solid var(--card-border); border-radius: 99px; padding: 12px 28px 12px 14px; margin-bottom: 56px; }
+.s-start .start-brand .logo { width: 34px; height: 34px; border-radius: 9px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+.s-start .start-brand .name { font-size: 25px; font-weight: 650; }
+.s-start .start-title { font-size: 76px; line-height: 1.22; font-weight: 800; letter-spacing: -2px; }
+.s-start .start-title .gr { background: linear-gradient(92deg, var(--accent) 10%, var(--accent-2) 90%);
+    -webkit-background-clip: text; background-clip: text; color: transparent; }
+.s-start .start-sub { margin-top: 32px; font-size: 26px; color: var(--text-secondary); }
+.s-start .start-btn { display: inline-flex; align-items: center; gap: 14px; margin-top: 64px;
+    padding: 24px 72px; font-size: 30px; font-weight: 700; font-family: var(--font-body);
+    color: #04121f; border: none; border-radius: 99px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    cursor: pointer; box-shadow: 0 8px 30px rgba(76,194,255,.35); }
+.s-start .start-btn.reveal { transition: opacity .9s var(--ease-out-expo), transform .9s var(--ease-out-expo), box-shadow .9s ease; }
+.s-start .start-btn.reveal.d5 { transition-delay: .92s, .92s, 0s; }
+.s-start .start-btn:hover { transform: translateY(-3px) scale(1.03);
+    box-shadow: 0 14px 44px rgba(76,194,255,.5);
+    transition: transform .25s var(--ease-out-expo), box-shadow .25s ease; }
+.s-start .start-btn:active { transform: translateY(-1px) scale(1.0); }
+.s-start .start-btn .play-ico { font-size: 22px; }
+.s-start .start-hint { margin-top: 26px; font-size: 20px; color: var(--text-dim); }
+.s-start .reveal { transition-duration: .9s; }
+.s-start .d1 { transition-delay: .2s; } .s-start .d2 { transition-delay: .4s; }
+.s-start .d3 { transition-delay: .58s; } .s-start .d4 { transition-delay: .76s; }
+.s-start .d5 { transition-delay: .92s; }
+/* 시작 화면에서는 하단 크롬·진행바·편집 UI 숨김 */
+.deck-progress, .deck-taskbar { transition: opacity .5s ease; }
+body.deck-start .deck-progress, body.deck-start .deck-taskbar { opacity: 0; pointer-events: none; }
+body.deck-start .edit-hotzone, body.deck-start .edit-toggle { display: none; }
+
 /* S1 타이틀 */
 .s-title .topbar { position: absolute; top: 56px; left: 120px; right: 120px; display: flex;
     justify-content: space-between; align-items: center; }
@@ -339,6 +373,16 @@ body.editing [contenteditable="true"]:hover { outline: 1px dashed rgba(126,231,1
     <main class="deck-stage" id="deckStage">
         <!-- 공유 배경 (모든 슬라이드 뒤) -->
         <div class="stage-bg"><div class="mica"></div><div class="noise"></div></div>
+
+        <!-- ============ S0. 시작 화면 ============ -->
+        <section class="slide s-start" data-ch="0">
+            <div class="start-wrap">
+                <div class="start-brand reveal d1"><div class="logo"></div><div class="name">Deskband11Lib</div></div>
+                <div class="start-title"><span class="reveal d2" style="display:block">윈도우 11에서 사라진</span><span class="reveal d3" style="display:block">작업표시줄 데스크밴드,</span><span class="reveal d4 gr" style="display:block">WinUI·WPF로 다시 만들기</span></div>
+                <button class="start-btn reveal d5" id="startBtn"><span class="play-ico">▶</span>발표 시작</button>
+                <div class="start-hint reveal d5">이호원 · airtaxi · Dot4 밋업 with 마이크로소프트 코리아</div>
+            </div>
+        </section>
 
         <!-- ============ S1. 타이틀 ============ -->
         <section class="slide s-title" data-ch="0">
@@ -1191,7 +1235,20 @@ class SlidePresentation {
         this.setupWheel();
         this.setupTouch();
         this.setupChapterIcons();
+        this.setupStartButton();
         this.show(0);
+    }
+    setupStartButton() {
+        const btn = document.getElementById('startBtn');
+        if (btn) btn.addEventListener('click', () => this.start());
+    }
+    start() {
+        document.body.classList.remove('deck-start');
+        const docEl = document.documentElement;
+        if (docEl.requestFullscreen) docEl.requestFullscreen().catch(() => {});
+        else if (docEl.webkitRequestFullscreen) docEl.webkitRequestFullscreen();
+        else if (docEl.msRequestFullscreen) docEl.msRequestFullscreen();
+        this.show(1);
     }
     setupScale() {
         const fit = () => {
@@ -1241,6 +1298,8 @@ class SlidePresentation {
             s.classList.toggle('active', j === this.current);
             s.classList.toggle('visible', j === this.current);
         });
+        const onStart = this.current === 0;
+        document.body.classList.toggle('deck-start', onStart);
         const ch = +(this.slides[this.current].dataset.ch || 0);
         document.querySelectorAll('.ch-ico').forEach(b => b.classList.toggle('on', +b.dataset.ch === ch));
         const info = CHAPTER_INFO[ch] || CHAPTER_INFO[0];
